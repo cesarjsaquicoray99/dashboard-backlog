@@ -67,18 +67,17 @@ h1 { font-size: 18px; font-weight: 600; }
 }
 .filtro button:hover { opacity: .9; }
 
-.grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start; }
-.inicio-grid .grid-kpis { grid-template-columns: repeat(4, 1fr); }
-.inicio-grid .tile { display: flex; flex-direction: column; justify-content: center; }
+.grid-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start; margin-top: 12px; }
 .plot.dona { height: 160px; }
 @media (max-width: 820px) {
   .inicio-grid { grid-template-columns: 1fr; }
-  .inicio-grid .grid-kpis { grid-template-columns: repeat(2, 1fr); }
+  .grid-kpis { grid-template-columns: repeat(2, 1fr); }
 }
 .tile {
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; justify-content: center;
 }
 .tile .etiqueta { font-size: 11px; color: var(--text-secondary); }
 .tile .valor { font-size: 26px; font-weight: 600; margin-top: 4px; }
@@ -228,23 +227,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 <div id="error"></div>
 
 <div id="contenido" class="cargando">
-  <div class="inicio-grid">
-    <div class="grid-kpis" id="kpis"></div>
-    <div class="card">
-      <h2>Antigüedad del backlog</h2>
-      <div class="nota">Días sin avance desde el último evento registrado</div>
-      <div class="plot dona"><canvas id="ch-dona"></canvas></div>
-      <div id="lista-aging" class="leyenda"></div>
-    </div>
-  </div>
+  <div class="grid-kpis" id="kpis"></div>
 
-  <div class="grid-cards una">
+  <div class="inicio-grid">
     <div class="card">
       <div class="card-head"><h2>Backlog por etapa</h2><button class="ver-tabla" data-tabla="t-etapa">Ver tabla</button></div>
       <div class="nota">Folios en backlog por etapa, desglosados por antigüedad. El número al final de cada barra es el total de la etapa.</div>
       <div class="plot-scroll"><div class="plot" id="plot-etapa"><canvas id="ch-etapa"></canvas></div></div>
       <div class="tabla-scroll oculto" id="t-etapa"></div>
       <div class="leyenda" id="leyenda-etapa"></div>
+    </div>
+    <div class="card">
+      <h2>Antigüedad del backlog</h2>
+      <div class="nota">Días sin avance desde el último evento registrado</div>
+      <div class="plot dona"><canvas id="ch-dona"></canvas></div>
+      <div id="lista-aging" class="leyenda"></div>
     </div>
   </div>
 

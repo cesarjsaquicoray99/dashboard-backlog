@@ -77,7 +77,10 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   activo).
 
 ## Vistas del dashboard
-- KPI tiles + dona de antigüedad (headline: total, % crítico, promedio de días, sin clasificar).
+- KPI tiles en su propia fila completa (4 columnas: total, % crítico, promedio de días, sin
+  clasificar); debajo, **Backlog por etapa** y la **dona de antigüedad** comparten fila
+  (`.inicio-grid`, 2fr/1fr) — reordenado el 20 ago 2026 a pedido del usuario (antes las
+  tiles compartían fila con la dona y la etapa iba sola debajo).
 - **Backlog por etapa**: barra apilada (etapa × aging), con tabla accesible ("Ver tabla").
 - **Evolución del backlog**: barras (con data labels) de folios en backlog agrupados por la fecha de su
   `Último evento: Fecha`, con toggle Día/Semana/Mes. **Importante**: esto NO es una serie
