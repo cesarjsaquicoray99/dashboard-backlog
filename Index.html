@@ -98,7 +98,11 @@ h1 { font-size: 18px; font-weight: 600; }
   border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer;
 }
 .ver-tabla.activo { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
-.acciones { display: flex; gap: 6px; flex: none; }
+.acciones { display: flex; gap: 6px; flex: none; align-items: center; }
+.acciones select {
+  font: inherit; font-size: 11px; color: var(--text-secondary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; cursor: pointer;
+}
 
 .multisel { position: relative; }
 .multisel > button {
@@ -287,9 +291,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="card">
       <div class="card-head">
         <h2>Folios más antiguos</h2>
-        <div class="acciones"><button class="ver-tabla" id="btn-copiar-folios">Copiar folios listados</button></div>
+        <div class="acciones">
+          <select id="f-top-detalle">
+            <option value="10">Top 10</option>
+            <option value="25" selected>Top 25</option>
+            <option value="50">Top 50</option>
+          </select>
+          <button class="ver-tabla" id="btn-copiar-visibles">Copiar folios visibles</button>
+          <button class="ver-tabla" id="btn-copiar-todos">Copiar todos los filtrados</button>
+        </div>
       </div>
-      <div class="nota">Top <span id="top-n"></span> folios en backlog con más días sin avance.</div>
+      <div class="nota">Top <span id="top-n"></span> folios en backlog con más días sin avance
+        (de <span id="top-n-total"></span> filtrados en total).</div>
       <div class="tabla-scroll" id="t-detalle"></div>
     </div>
   </div>
@@ -686,6 +699,7 @@ function chipAging(clave) {
 
 let datosDetalle = [];
 let sortDetalle = { key: 'dias', dir: -1 };
+let topDetalle = 25; // cuántas filas se muestran en "Folios más antiguos" (10/25/50, elegible)
 
 function claveAgingChip(etiquetaAging) {
   const b = BUCKETS_AGING.find(b => etiquetaAging.indexOf(b.etiqueta) === 0);
@@ -717,7 +731,9 @@ function pintarDetalle() {
     ['dias', 'Días sin avance', true], ['aging', 'Antigüedad'],
     ['proveedor', 'Proveedor'], ['donVeloz', 'Don Veloz'], ['eta', 'ETA']
   ];
-  const lista = ordenar(datosDetalle, sortDetalle);
+  const lista = ordenar(datosDetalle, sortDetalle).slice(0, topDetalle);
+  document.getElementById('top-n').textContent = lista.length;
+  document.getElementById('top-n-total').textContent = datosDetalle.length;
   document.getElementById('t-detalle').innerHTML =
     '<table><thead>' + cabecerasHtml(cols, sortDetalle) + '</thead><tbody>' +
     lista.map(f => '<tr>' +
@@ -962,7 +978,6 @@ function pintar(d) {
   pintarEventos();
 
   datosDetalle = d.detalle;
-  document.getElementById('top-n').textContent = d.detalle.length;
   pintarDetalle();
 
   renderChips();
@@ -1052,7 +1067,17 @@ document.getElementById('t-detalle').addEventListener('click', function(e) {
   pintarDetalle();
 });
 
-document.getElementById('btn-copiar-folios').addEventListener('click', function() {
+document.getElementById('f-top-detalle').addEventListener('change', function() {
+  topDetalle = Number(this.value);
+  pintarDetalle();
+});
+
+document.getElementById('btn-copiar-visibles').addEventListener('click', function() {
+  const lista = ordenar(datosDetalle, sortDetalle).slice(0, topDetalle).map(f => f.folio).join('\n');
+  copiarTexto(lista, this);
+});
+
+document.getElementById('btn-copiar-todos').addEventListener('click', function() {
   const lista = ordenar(datosDetalle, sortDetalle).map(f => f.folio).join('\n');
   copiarTexto(lista, this);
 });

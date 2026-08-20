@@ -1,8 +1,7 @@
 const CONFIG = {
   SPREADSHEET_ID: '1yt-vTk6oZWbX0uHbqhUOu9DahmaBgikArUz_QUIwx8Y', // "Backlog - PE"
   SHEET_NAME: 'BD',
-  HEADER_ROW: 1,
-  TOP_DETALLE: 50 // folios más antiguos a mostrar en la tabla de detalle
+  HEADER_ROW: 1
 };
 
 // Etapas del backlog, resueltas por los 4 primeros caracteres de "Último evento: Evento"
@@ -299,10 +298,14 @@ function porAging_(folios) {
   return lista;
 }
 
+// Devuelve TODOS los folios filtrados (no solo los "más antiguos"), ordenados por días
+// sin avance descendente — el recorte a "Top N" y el reordenamiento por columna los hace
+// el frontend sin volver a pedir datos al servidor (mismo patrón que Evolución del
+// backlog); así "Copiar todos los filtrados" tiene acceso al set completo, no solo al
+// que se está mostrando en la tabla.
 function detalleMasAntiguos_(folios) {
   return folios.slice()
     .sort(function(a, b) { return (b.dias == null ? -1 : b.dias) - (a.dias == null ? -1 : a.dias); })
-    .slice(0, CONFIG.TOP_DETALLE)
     .map(function(f) {
       return {
         folio: f.folio,

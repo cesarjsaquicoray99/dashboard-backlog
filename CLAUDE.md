@@ -102,8 +102,18 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   rápida de qué códigos caen en "Otro / sin clasificar" sin tener que abrir el editor de
   Apps Script a correr `debugEventos()` (aunque esa función sigue disponible para diagnóstico
   puntual).
-- **Folios más antiguos**: detalle a nivel de folio (top `CONFIG.TOP_DETALLE`), con copiado
-  de la lista de folios al portapapeles.
+- **Folios más antiguos**: detalle a nivel de folio. El backend (`detalleMasAntiguos_`) ya
+  **no** recorta a un top N fijo (se quitó `CONFIG.TOP_DETALLE` el 20 ago 2026) — manda
+  **todos** los folios filtrados, ordenados por días sin avance descendente; el recorte a
+  10/25/50 (`topDetalle`, dropdown `#f-top-detalle`, default 25) lo hace el frontend sin
+  volver a pedir datos, mismo patrón que Día/Semana/Mes en Evolución. Por eso hay dos
+  botones de copiado con alcance distinto: **"Copiar folios visibles"** (solo las filas
+  que se están mostrando, respeta el top N y el orden de columna actual) y **"Copiar todos
+  los filtrados"** (el backlog completo que cumple los filtros activos, sin el recorte).
+  Se agregó a pedido del usuario tras notar que los folios de "0 días" nunca aparecían en
+  la tabla — no era un bug, era el recorte fijo a 50 descartándolos por ser los menos
+  urgentes; la solución no fue subir el tope sino hacerlo configurable y separar "lo que
+  se ve" de "lo que se puede copiar".
 - Las tres tablas agrupadas (cliente/proveedor/evento) comparten el render `pintarTablaAgrupada()`
   en `Index.html` — misma forma de datos desde el backend (`{...claves de BUCKETS_AGING,
   sinAging, total, ...clave(s)}`), solo cambia la(s) columna(s) identificadora(s).
