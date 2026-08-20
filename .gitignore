@@ -1,0 +1,10 @@
+# clasp
+.clasp.json
+.clasprc.json
+
+# node
+node_modules/
+
+# OS
+Thumbs.db
+.DS_Store

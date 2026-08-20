@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Backlog — 99minutos</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  /* Paleta de marca 99minutos (ver CLAUDE.md raíz) */
+  --brand-navy: #12344A;
+  --brand-blue: #1976D2;
+  --status-good: #85C440;
+  --status-warning: #FFA000;
+  --status-critical: #E53935;
+  --status-muted: #64748B;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --brand-navy: #1e4a68;
+    --brand-blue: #3B82F6;
+    --status-muted: #94A3B8;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--text-primary);
+  padding: 20px;
+  font-size: 14px;
+}
+h1 { font-size: 18px; font-weight: 600; }
+.subtitulo { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+.filtros {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin: 16px 0;
+}
+.filtro label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+.filtro select, .filtro input {
+  font: inherit; color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 130px;
+}
+.filtro button {
+  font: inherit; font-weight: 600; color: #fff; background: var(--brand-navy);
+  border: none; border-radius: 6px; padding: 7px 16px; cursor: pointer;
+}
+.filtro button:hover { opacity: .9; }
+
+.grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: stretch; }
+.inicio-grid .grid-kpis { grid-template-columns: repeat(2, 1fr); }
+.inicio-grid .tile { display: flex; flex-direction: column; justify-content: center; }
+.plot.dona { height: 240px; }
+@media (max-width: 820px) { .inicio-grid { grid-template-columns: 1fr; } }
+.tile {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px;
+}
+.tile .etiqueta { font-size: 11px; color: var(--text-secondary); }
+.tile .valor { font-size: 26px; font-weight: 600; margin-top: 4px; }
+.tile .valor.critico { color: var(--status-critical); }
+.tile .detalle { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-top: 12px; }
+.grid-cards.una { grid-template-columns: 1fr; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px; min-width: 0;
+}
+.card h2 { font-size: 13px; font-weight: 600; }
+.card .nota { font-size: 11px; color: var(--text-muted); margin: 2px 0 10px; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ver-tabla {
+  font-size: 11px; color: var(--text-secondary); background: none;
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer;
+}
+.ver-tabla.activo { background: var(--brand-navy); border-color: var(--brand-navy); color: #fff; }
+.acciones { display: flex; gap: 6px; flex: none; }
+
+.multisel { position: relative; }
+.multisel > button {
+  font: inherit; color: var(--text-primary); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  min-width: 150px; max-width: 220px; text-align: left; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.multisel-panel {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; width: 320px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.15);
+}
+.multisel-panel input[type="text"] {
+  width: 100%; min-width: 0; font: inherit; color: var(--text-primary);
+  background: var(--page); border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 8px; margin-bottom: 6px;
+}
+.multisel-opciones { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.filtro .multisel-op, .multisel-op {
+  display: flex; align-items: center; gap: 7px; font-size: 12.5px;
+  color: var(--text-primary); margin: 0;
+  padding: 4px 6px; border-radius: 5px; cursor: pointer;
+}
+.multisel-op span { flex: 1; min-width: 0; text-align: left; }
+.multisel-op:hover { background: var(--page); }
+.multisel-op input { accent-color: var(--brand-navy); flex: none; margin: 0; }
+.filtro .multisel-limpiar {
+  margin-top: 8px; width: 100%; font-size: 11px; font-weight: 400;
+  color: var(--text-secondary); background: none;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 8px; cursor: pointer;
+}
+.filtro .multisel-limpiar:hover { color: var(--text-primary); }
+
+.leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--text-secondary); }
+.leyenda .punto { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+
+th.ordenable { cursor: pointer; user-select: none; }
+th.ordenable:hover { color: var(--text-primary); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; font-size: 11px; color: var(--text-secondary);
+  border-bottom: 1px solid var(--baseline); padding: 6px 8px; white-space: nowrap;
+}
+td { padding: 6px 8px; border-bottom: 1px solid var(--grid); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabla-scroll { overflow-x: auto; }
+.chip { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.chip.good { background: rgba(133,196,64,.16); color: var(--status-good); }
+.chip.warning { background: rgba(255,160,0,.16); color: var(--status-warning); }
+.chip.critical { background: rgba(229,57,53,.16); color: var(--status-critical); }
+.chip.muted { background: rgba(148,163,184,.20); color: var(--status-muted); }
+
+.fila-filtrable { cursor: pointer; }
+.fila-filtrable:hover td { background: var(--page); }
+.fila-filtrable.activa td { background: rgba(25,118,210,.12); }
+.fila-filtrable.activa td:first-child { font-weight: 600; color: var(--brand-blue); }
+
+.chips-filtro { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: -6px 0 14px; }
+.chip-filtro {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-secondary);
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 3px 6px 3px 10px;
+}
+.chip-filtro button {
+  border: none; background: none; color: var(--text-muted); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0 2px;
+}
+.chip-filtro button:hover { color: var(--status-critical); }
+
+.plot { position: relative; height: 260px; }
+.plot-scroll {
+  max-height: 380px; overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain;
+  border-bottom: 1px solid var(--grid);
+}
+
+.cargando { opacity: .45; pointer-events: none; transition: opacity .15s; }
+#error {
+  display: none; background: var(--surface-1); border: 1px solid var(--status-critical);
+  color: var(--status-critical); border-radius: 10px; padding: 12px 14px; margin-top: 12px;
+}
+.oculto { display: none !important; }
+</style>
+</head>
+<body>
+<h1>Backlog — 99minutos</h1>
+<div class="subtitulo" id="actualizado">Cargando…</div>
+
+<div class="filtros">
+  <div class="filtro"><label>Empresa</label>
+    <div class="multisel" id="f-empresa-box">
+      <button type="button" id="f-empresa-btn">Todas</button>
+      <div class="multisel-panel oculto" id="f-empresa-panel">
+        <input type="text" id="f-empresa-buscar" placeholder="Buscar empresa…">
+        <div class="multisel-opciones" id="f-empresa-opciones"></div>
+        <button type="button" class="multisel-limpiar" id="f-empresa-limpiar">Limpiar selección</button>
+      </div>
+    </div>
+  </div>
+  <div class="filtro"><label>Tipo de envío</label><select id="f-tipo"><option value="">Todos</option></select></div>
+  <div class="filtro"><label>Proveedor</label><select id="f-proveedor"><option value="">Todos</option></select></div>
+  <div class="filtro"><label>Don Veloz</label><select id="f-donveloz"><option value="">Todos</option></select></div>
+  <div class="filtro"><label>ETA desde</label><input type="date" id="f-eta-desde"></div>
+  <div class="filtro"><label>ETA hasta</label><input type="date" id="f-eta-hasta"></div>
+  <div class="filtro"><button id="btn-aplicar">Aplicar</button></div>
+</div>
+
+<div class="chips-filtro oculto" id="chips-filtro"></div>
+
+<div id="error"></div>
+
+<div id="contenido" class="cargando">
+  <div class="inicio-grid">
+    <div class="grid-kpis" id="kpis"></div>
+    <div class="card">
+      <h2>Antigüedad del backlog</h2>
+      <div class="nota">Días sin avance desde el último evento registrado</div>
+      <div class="plot dona"><canvas id="ch-dona"></canvas></div>
+      <div id="lista-aging" class="leyenda"></div>
+    </div>
+  </div>
+
+  <div class="grid-cards una">
+    <div class="card">
+      <div class="card-head"><h2>Backlog por etapa</h2><button class="ver-tabla" data-tabla="t-etapa">Ver tabla</button></div>
+      <div class="nota">Folios en backlog por etapa, desglosados por antigüedad. El número al final de cada barra es el total de la etapa.</div>
+      <div class="plot-scroll"><div class="plot" id="plot-etapa"><canvas id="ch-etapa"></canvas></div></div>
+      <div class="tabla-scroll oculto" id="t-etapa"></div>
+      <div class="leyenda">
+        <span><span class="punto" style="background:var(--status-good)"></span>0–2 días</span>
+        <span><span class="punto" style="background:var(--status-warning)"></span>3–5 días</span>
+        <span><span class="punto" style="background:var(--status-critical)"></span>6+ días</span>
+        <span id="leyenda-sin-aging" class="oculto"><span class="punto" style="background:var(--status-muted)"></span>Sin fecha de evento</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-cards una">
+    <div class="card">
+      <div class="card-head">
+        <h2>Evolución del backlog</h2>
+        <div class="acciones">
+          <button class="ver-tabla activo" id="btn-f-dia">Día</button>
+          <button class="ver-tabla" id="btn-f-semana">Semana</button>
+          <button class="ver-tabla" id="btn-f-mes">Mes</button>
+          <button class="ver-tabla" data-tabla="t-fecha">Ver tabla</button>
+        </div>
+      </div>
+      <div class="nota">Folios en backlog agrupados por la fecha de su último evento — no es un histórico del tamaño del backlog día a día, sino cuándo se atascó cada folio que sigue pendiente hoy.</div>
+      <div class="plot"><canvas id="ch-fecha"></canvas></div>
+      <div class="tabla-scroll oculto" id="t-fecha"></div>
+    </div>
+  </div>
+
+  <div class="grid-cards">
+    <div class="card">
+      <h2>Backlog por cliente</h2>
+      <div class="nota">Folios en backlog por empresa, desglosados por antigüedad. Clic en un encabezado para ordenar.</div>
+      <div class="tabla-scroll" id="t-cliente"></div>
+    </div>
+    <div class="card">
+      <h2>Backlog por proveedor</h2>
+      <div class="nota">Folios en backlog atribuidos al proveedor actual ("Último evento: Proveedor"), desglosados por antigüedad. Clic en un encabezado para ordenar.</div>
+      <div class="tabla-scroll" id="t-proveedor"></div>
+    </div>
+  </div>
+
+  <div class="grid-cards una">
+    <div class="card">
+      <h2>Backlog por evento</h2>
+      <div class="nota">Folios en backlog por código crudo de "Último evento: Evento" (sin pasar por el mapeo de etapas) — permite ver a qué etapa cae cada código y detectar los que quedan "Otro / sin clasificar". Clic en un encabezado para ordenar.</div>
+      <div class="tabla-scroll" id="t-evento"></div>
+    </div>
+  </div>
+
+  <div class="grid-cards una">
+    <div class="card">
+      <div class="card-head">
+        <h2>Folios más antiguos</h2>
+        <div class="acciones"><button class="ver-tabla" id="btn-copiar-folios">Copiar folios listados</button></div>
+      </div>
+      <div class="nota">Top <span id="top-n"></span> folios en backlog con más días sin avance.</div>
+      <div class="tabla-scroll" id="t-detalle"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+let charts = {};
+
+function hexARgba(hex, alfa) {
+  const n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + alfa + ')';
+}
+
+const textoCentro = {
+  id: 'textoCentro',
+  afterDraw(chart) {
+    const t = chart.options.plugins.textoCentro;
+    if (!t || t.valor == null) return;
+    const a = chart.chartArea;
+    const cx = (a.left + a.right) / 2, cy = (a.top + a.bottom) / 2;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillStyle = css('--text-primary');
+    ctx.fillText(t.valor, cx, cy - 8);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = css('--text-muted');
+    ctx.fillText(t.sub, cx, cy + 12);
+    ctx.restore();
+  }
+};
+// Total apilado: suma los datasets visibles de cada fila y lo dibuja al final de la barra
+// (una sola etiqueta por fila, no una por segmento).
+const etiquetaTotalBarra = {
+  id: 'etiquetaTotalBarra',
+  afterDatasetsDraw(chart) {
+    if (!chart.options.plugins.etiquetaTotalBarra) return;
+    const ctx = chart.ctx;
+    const datasets = chart.data.datasets;
+    const n = chart.data.labels.length;
+    ctx.save();
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.fillStyle = css('--text-primary');
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i < n; i++) {
+      let total = 0, xMax = null, y = null;
+      datasets.forEach(function(ds, di) {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        total += ds.data[i] || 0;
+        const el = meta.data[i];
+        if (el) { xMax = xMax == null ? el.x : Math.max(xMax, el.x); y = el.y; }
+      });
+      if (xMax == null || total === 0) continue;
+      ctx.fillText(String(total), Math.min(xMax + 6, chart.chartArea.right + 34), y);
+    }
+    ctx.restore();
+  }
+};
+Chart.register(textoCentro, etiquetaTotalBarra);
+
+function baseOpts() {
+  Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+  Chart.defaults.color = css('--text-muted');
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'nearest', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: css('--surface-1'), titleColor: css('--text-primary'),
+        bodyColor: css('--text-secondary'), borderColor: css('--border'),
+        borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: true,
+        boxWidth: 8, boxHeight: 8, boxPadding: 4, usePointStyle: true
+      },
+      textoCentro: false,
+      etiquetaTotalBarra: false
+    }
+  };
+}
+
+function destruir(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function fmt(v, suf) { return v == null ? '–' : v + (suf || ''); }
+
+function pintarKpis(k) {
+  const tiles = [
+    ['Backlog total', k.total, 'folios sin evento terminal'],
+    ['Críticos (6+ días)', k.criticos, fmt(k.pctCriticos, '%') + ' del backlog', k.criticos > 0 ? 'critico' : ''],
+    ['Antigüedad promedio', fmt(k.promedioDias, ' días'), 'sin avance desde el último evento'],
+    ['Sin clasificar', k.sinClasificar, 'código de evento fuera del mapeo de etapas (ver debugEventos)']
+  ];
+  document.getElementById('kpis').innerHTML = tiles.map(t =>
+    '<div class="tile"><div class="etiqueta">' + t[0] + '</div>' +
+    '<div class="valor' + (t[3] ? ' ' + t[3] : '') + '">' + t[1] + '</div>' +
+    '<div class="detalle">' + t[2] + '</div></div>'
+  ).join('');
+}
+
+function colorEstado(clave) {
+  return clave === 'good' ? css('--status-good')
+    : clave === 'warning' ? css('--status-warning')
+    : clave === 'critical' ? css('--status-critical')
+    : css('--status-muted');
+}
+
+function graficaDona(porAging, total) {
+  destruir('dona');
+  const criticos = (porAging.find(b => b.clave === 'critico') || {}).total || 0;
+  const pctCriticos = total ? Math.round(criticos / total * 1000) / 10 : null;
+  document.getElementById('lista-aging').innerHTML = porAging.map(b =>
+    '<span><span class="punto" style="background:' + colorEstado(b.color) + '"></span>' +
+    b.etiqueta + ': <strong>' + b.total + '</strong></span>').join('');
+  charts.dona = new Chart(document.getElementById('ch-dona'), {
+    type: 'doughnut',
+    data: {
+      labels: porAging.map(b => b.etiqueta),
+      datasets: [{
+        data: porAging.map(b => b.total),
+        backgroundColor: porAging.map(b => colorEstado(b.color)),
+        borderColor: css('--surface-1'), borderWidth: 2, hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        textoCentro: { valor: fmt(pctCriticos, '%'), sub: 'críticos' },
+        legend: { position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 8, boxHeight: 8,
+                    color: css('--text-secondary'), font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: css('--surface-1'), titleColor: css('--text-primary'),
+          bodyColor: css('--text-secondary'), borderColor: css('--border'),
+          borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: true,
+          boxWidth: 8, boxHeight: 8, boxPadding: 4, usePointStyle: true,
+          callbacks: {
+            label: c => ' ' + c.parsed + ' folios (' +
+              (total ? Math.round(c.parsed / total * 1000) / 10 : 0) + '%)'
+          }
+        }
+      }
+    }
+  });
+}
+
+function graficaEtapa(porEtapa) {
+  destruir('etapa');
+  document.getElementById('leyenda-sin-aging').classList.toggle('oculto',
+    !porEtapa.some(e => e.sinAging > 0));
+  const plot = document.getElementById('plot-etapa');
+  plot.style.height = Math.max(220, porEtapa.length * 48 + 40) + 'px';
+  const opts = baseOpts();
+  opts.indexAxis = 'y';
+  opts.plugins.etiquetaTotalBarra = true;
+  opts.scales = {
+    x: { stacked: true, grid: { color: css('--grid'), lineWidth: 1 }, border: { display: false },
+         beginAtZero: true, grace: '12%', ticks: { precision: 0 } },
+    y: { stacked: true, grid: { display: false }, border: { color: css('--baseline') },
+         ticks: { color: css('--text-secondary'), autoSkip: false } }
+  };
+  opts.plugins.tooltip.callbacks = {
+    footer: c => c.length ? porEtapa[c[0].dataIndex].total + ' folios en total' : ''
+  };
+  const datasets = [
+    { label: '0–2 días', data: porEtapa.map(e => e.reciente),
+      backgroundColor: css('--status-good'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' },
+    { label: '3–5 días', data: porEtapa.map(e => e.atencion),
+      backgroundColor: css('--status-warning'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' },
+    { label: '6+ días', data: porEtapa.map(e => e.critico),
+      backgroundColor: css('--status-critical'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' }
+  ];
+  if (porEtapa.some(e => e.sinAging > 0)) {
+    datasets.push({ label: 'Sin fecha de evento', data: porEtapa.map(e => e.sinAging),
+      backgroundColor: css('--status-muted'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' });
+  }
+  charts.etapa = new Chart(document.getElementById('ch-etapa'), {
+    type: 'bar',
+    data: { labels: porEtapa.map(e => e.etiqueta), datasets: datasets },
+    options: opts
+  });
+  pintarTablaEtapa(porEtapa);
+}
+
+let filtroEtapa = null;  // { clave, etiqueta } | null — seteado al clickear una fila de t-etapa
+let filtroEvento = null; // { codigo, etapa } | null — seteado al clickear una fila de t-evento
+
+function pintarTablaEtapa(porEtapa) {
+  const activo = filtroEtapa ? filtroEtapa.clave : null;
+  const conSinAging = porEtapa.some(e => e.sinAging > 0);
+  const cabeceras = ['Etapa', '0–2 días', '3–5 días', '6+ días'].concat(conSinAging ? ['Sin fecha'] : []).concat(['Total']);
+  document.getElementById('t-etapa').innerHTML =
+    '<table><thead><tr>' + cabeceras.map((c, i) => '<th class="' + (i ? 'num' : '') + '">' + c + '</th>').join('') + '</tr></thead><tbody>' +
+    porEtapa.map(e => '<tr class="fila-filtrable' + (activo === e.etapa ? ' activa' : '') + '" data-valor="' + esc(e.etapa) + '">' +
+      '<td>' + e.etiqueta + '</td>' +
+      '<td class="num">' + e.reciente + '</td>' +
+      '<td class="num">' + e.atencion + '</td>' +
+      '<td class="num">' + e.critico + '</td>' +
+      (conSinAging ? '<td class="num">' + e.sinAging + '</td>' : '') +
+      '<td class="num"><strong>' + e.total + '</strong></td>' +
+      '</tr>').join('') +
+    '</tbody></table>';
+}
+
+// ── Evolución del backlog (por fecha del último evento, día/semana/mes) ──
+let datosFechaDiaria = [];
+let granFecha = 'dia';
+
+// Lunes de la semana ISO que contiene fechaIso ('yyyy-MM-dd').
+function lunesDeSemana(fechaIso) {
+  const d = new Date(fechaIso + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+// Re-agrupa los buckets diarios que manda el backend a semana o mes (sin volver a pedir
+// datos al servidor); 'dia' se devuelve tal cual.
+function agregarFecha(diarios, gran) {
+  if (gran === 'dia') return diarios.map(d => ({ etiqueta: d.fecha, total: d.total }));
+  const por = {};
+  diarios.forEach(function(d) {
+    const clave = gran === 'semana' ? lunesDeSemana(d.fecha) : d.fecha.slice(0, 7);
+    por[clave] = (por[clave] || 0) + d.total;
+  });
+  return Object.keys(por).sort().map(function(k) {
+    return { etiqueta: gran === 'semana' ? 'Sem. del ' + k : k, total: por[k] };
+  });
+}
+
+function graficaFecha() {
+  destruir('fecha');
+  const serie = agregarFecha(datosFechaDiaria, granFecha);
+  const opts = baseOpts();
+  opts.scales = {
+    x: { grid: { display: false }, border: { color: css('--baseline') },
+         ticks: { maxRotation: 45, autoSkip: true } },
+    y: { grid: { color: css('--grid'), lineWidth: 1 }, border: { display: false },
+         beginAtZero: true, grace: '10%', ticks: { precision: 0 } }
+  };
+  opts.plugins.tooltip.callbacks = { label: c => ' ' + c.parsed.y + ' folios en backlog' };
+  charts.fecha = new Chart(document.getElementById('ch-fecha'), {
+    type: 'line',
+    data: {
+      labels: serie.map(s => s.etiqueta),
+      datasets: [{
+        label: 'Backlog',
+        data: serie.map(s => s.total),
+        borderColor: css('--brand-blue'), borderWidth: 2,
+        backgroundColor: hexARgba(css('--brand-blue'), 0.12), fill: true,
+        pointRadius: serie.length > 40 ? 0 : 3, pointHoverRadius: 5,
+        pointBackgroundColor: css('--brand-blue'),
+        pointBorderColor: css('--surface-1'), pointBorderWidth: 2,
+        tension: 0.2
+      }]
+    },
+    options: opts
+  });
+  tabla('t-fecha',
+    [granFecha === 'dia' ? 'Fecha' : granFecha === 'semana' ? 'Semana' : 'Mes', 'Folios en backlog'],
+    serie.map(s => [s.etiqueta, s.total]));
+}
+
+function cambiarGranFecha(gran) {
+  if (gran === granFecha) return;
+  granFecha = gran;
+  ['dia', 'semana', 'mes'].forEach(g =>
+    document.getElementById('btn-f-' + g).classList.toggle('activo', g === gran));
+  graficaFecha();
+}
+
+function tabla(id, cabeceras, filas) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<table><thead><tr>' +
+    cabeceras.map((c, i) => '<th class="' + (i ? 'num' : '') + '">' + c + '</th>').join('') +
+    '</tr></thead><tbody>' +
+    filas.map(f => '<tr>' + f.map((v, i) =>
+      '<td class="' + (i ? 'num' : '') + '">' + v + '</td>').join('') + '</tr>').join('') +
+    '</tbody></table>';
+}
+
+function chipAging(clave) {
+  return '<span class="chip ' + (clave || 'muted') + '">';
+}
+
+let datosDetalle = [];
+let sortDetalle = { key: 'dias', dir: -1 };
+
+function claveAgingChip(etiquetaAging) {
+  if (etiquetaAging.indexOf('0–2') === 0) return 'good';
+  if (etiquetaAging.indexOf('3–5') === 0) return 'warning';
+  if (etiquetaAging.indexOf('6+') === 0) return 'critical';
+  return 'muted';
+}
+
+function ordenar(lista, s) {
+  return lista.slice().sort(function(a, b) {
+    const va = a[s.key], vb = b[s.key];
+    const na = va == null, nb = vb == null;
+    if (na && nb) return 0;
+    if (na) return 1;
+    if (nb) return -1;
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * s.dir;
+    return String(va).localeCompare(String(vb)) * s.dir;
+  });
+}
+
+function cabecerasHtml(cols, s) {
+  return '<tr>' + cols.map(function(c) {
+    return '<th class="ordenable' + (c[2] ? ' num' : '') + '" data-key="' + c[0] + '">' + c[1] +
+      (s.key === c[0] ? (s.dir === 1 ? ' ▲' : ' ▼') : '') + '</th>';
+  }).join('') + '</tr>';
+}
+
+function pintarDetalle() {
+  const cols = [
+    ['folio', 'Folio'], ['empresa', 'Empresa'], ['etapa', 'Etapa'],
+    ['dias', 'Días sin avance', true], ['aging', 'Antigüedad'],
+    ['proveedor', 'Proveedor'], ['donVeloz', 'Don Veloz'], ['eta', 'ETA']
+  ];
+  const lista = ordenar(datosDetalle, sortDetalle);
+  document.getElementById('t-detalle').innerHTML =
+    '<table><thead>' + cabecerasHtml(cols, sortDetalle) + '</thead><tbody>' +
+    lista.map(f => '<tr>' +
+      '<td>' + f.folio + '</td>' +
+      '<td>' + f.empresa + '</td>' +
+      '<td>' + f.etapa + '</td>' +
+      '<td class="num">' + fmt(f.dias) + '</td>' +
+      '<td>' + chipAging(claveAgingChip(f.aging)) + f.aging + '</span></td>' +
+      '<td>' + (f.proveedor || '–') + '</td>' +
+      '<td>' + (f.donVeloz || '–') + '</td>' +
+      '<td>' + (f.eta || '–') + '</td>' +
+      '</tr>').join('') +
+    '</tbody></table>';
+}
+
+// ── Tablas agrupadas con desglose de aging (proveedor / cliente / evento) ──
+// Misma forma de datos ({ reciente, atencion, critico, sinAging, total, ...clave(s) });
+// una sola función de render parametrizada por la(s) columna(s) identificadoras.
+let datosProveedor = [], sortProveedor = { key: 'total', dir: -1 };
+let datosCliente = [], sortCliente = { key: 'total', dir: -1 };
+let datosEvento = [], sortEvento = { key: 'total', dir: -1 };
+
+function esc(s) { return String(s).replace(/"/g, '&quot;'); }
+
+// `activo` es el valor (crudo) de la columna identificadora que está filtrando ahora
+// mismo, si hay alguno — solo para resaltar la fila correspondiente.
+function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
+  const conSinAging = datos.some(d => d.sinAging > 0);
+  const cols = colsIdentidad.concat([
+    ['reciente', '0–2 días', true], ['atencion', '3–5 días', true], ['critico', '6+ días', true]
+  ]).concat(conSinAging ? [['sinAging', 'Sin fecha', true]] : [])
+    .concat([['total', 'Total', true]]);
+  const lista = ordenar(datos, s);
+  const claveFiltro = colsIdentidad[0][0];
+  document.getElementById(contId).innerHTML =
+    '<table><thead>' + cabecerasHtml(cols, s) + '</thead><tbody>' +
+    lista.map(d => '<tr class="fila-filtrable' + (activo != null && activo === d[claveFiltro] ? ' activa' : '') +
+      '" data-valor="' + esc(d[claveFiltro]) + '">' +
+      colsIdentidad.map(c => '<td>' + d[c[0]] + '</td>').join('') +
+      '<td class="num">' + d.reciente + '</td>' +
+      '<td class="num">' + d.atencion + '</td>' +
+      '<td class="num">' + d.critico + '</td>' +
+      (conSinAging ? '<td class="num">' + d.sinAging + '</td>' : '') +
+      '<td class="num"><strong>' + d.total + '</strong></td>' +
+      '</tr>').join('') +
+    '</tbody></table>';
+}
+
+function pintarProveedores() {
+  const activo = document.getElementById('f-proveedor').value || null;
+  pintarTablaAgrupada('t-proveedor', datosProveedor, sortProveedor, [['proveedor', 'Proveedor']], activo);
+}
+function pintarClientes() {
+  const activo = empresasSel.size === 1 ? Array.from(empresasSel)[0] : null;
+  pintarTablaAgrupada('t-cliente', datosCliente, sortCliente, [['empresa', 'Empresa']], activo);
+}
+function pintarEventos() {
+  const activo = filtroEvento ? filtroEvento.codigo : null;
+  pintarTablaAgrupada('t-evento', datosEvento, sortEvento, [['codigo', 'Código'], ['etapa', 'Etapa']], activo);
+}
+
+// Delegado por tabla: clic en un `th[data-key]` ordena (si la tabla tiene sort configurado);
+// clic en una fila `.fila-filtrable` aplica/quita un filtro y recarga los datos.
+function wireTabla(contId, cfg) {
+  document.getElementById(contId).addEventListener('click', function(e) {
+    const th = e.target.closest('th[data-key]');
+    if (th && cfg.obtenerSort) {
+      const s = cfg.obtenerSort();
+      const k = th.dataset.key;
+      if (s.key === k) s.dir = -s.dir;
+      else cfg.fijarSort({ key: k, dir: -1 });
+      cfg.repintar();
+      return;
+    }
+    const fila = e.target.closest('tr.fila-filtrable');
+    if (fila && cfg.onFilaClick) cfg.onFilaClick(fila.dataset.valor, fila);
+  });
+}
+
+wireTabla('t-proveedor', {
+  obtenerSort: () => sortProveedor, fijarSort: s => sortProveedor = s, repintar: pintarProveedores,
+  onFilaClick: function(valor) {
+    const sel = document.getElementById('f-proveedor');
+    sel.value = sel.value === valor ? '' : valor;
+    cargar();
+  }
+});
+wireTabla('t-cliente', {
+  obtenerSort: () => sortCliente, fijarSort: s => sortCliente = s, repintar: pintarClientes,
+  onFilaClick: function(valor) {
+    const yaActivo = empresasSel.size === 1 && empresasSel.has(valor);
+    empresasSel.clear();
+    if (!yaActivo) empresasSel.add(valor);
+    pintarOpcionesEmpresas();
+    etiquetaEmpresas();
+    cargar();
+  }
+});
+wireTabla('t-evento', {
+  obtenerSort: () => sortEvento, fijarSort: s => sortEvento = s, repintar: pintarEventos,
+  onFilaClick: function(valor, fila) {
+    const etapaTexto = fila.children[1] ? fila.children[1].textContent : '';
+    filtroEvento = (filtroEvento && filtroEvento.codigo === valor) ? null : { codigo: valor, etapa: etapaTexto };
+    cargar();
+  }
+});
+wireTabla('t-etapa', {
+  onFilaClick: function(valor, fila) {
+    const etiqueta = fila.children[0] ? fila.children[0].textContent : valor;
+    filtroEtapa = (filtroEtapa && filtroEtapa.clave === valor) ? null : { clave: valor, etiqueta: etiqueta };
+    cargar();
+  }
+});
+
+function copiarTexto(texto, btn) {
+  const listo = function() {
+    if (!btn) return;
+    if (!btn.dataset.rotulo) btn.dataset.rotulo = btn.textContent;
+    btn.textContent = 'Copiado ✓';
+    setTimeout(function() { btn.textContent = btn.dataset.rotulo; }, 1500);
+  };
+  const fallback = function() {
+    const ta = document.createElement('textarea');
+    ta.value = texto;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    listo();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(listo, fallback);
+  } else fallback();
+}
+
+function llenarSelect(id, valores, actual) {
+  const sel = document.getElementById(id);
+  const primera = sel.options[0].outerHTML;
+  sel.innerHTML = primera + valores.map(v =>
+    '<option' + (v === actual ? ' selected' : '') + '>' + v + '</option>').join('');
+}
+
+// ── Multiselect de empresas ──
+let empresasSel = new Set();
+let empresasOpc = [];
+
+function pintarOpcionesEmpresas() {
+  const q = (document.getElementById('f-empresa-buscar').value || '').trim().toLowerCase();
+  const visibles = empresasOpc
+    .filter(c => !q || c.toLowerCase().indexOf(q) !== -1)
+    .slice().sort((a, b) => a.localeCompare(b));
+  document.getElementById('f-empresa-opciones').innerHTML = visibles.length
+    ? visibles.map(c =>
+        '<label class="multisel-op"><input type="checkbox" value="' + c.replace(/"/g, '&quot;') + '"' +
+        (empresasSel.has(c) ? ' checked' : '') + '><span>' + c + '</span></label>').join('')
+    : '<div class="nota" style="padding:4px 6px">Sin coincidencias</div>';
+}
+
+function etiquetaEmpresas() {
+  const btn = document.getElementById('f-empresa-btn');
+  btn.textContent = empresasSel.size === 0 ? 'Todas'
+    : empresasSel.size === 1 ? Array.from(empresasSel)[0]
+    : empresasSel.size + ' empresas';
+  btn.title = empresasSel.size ? Array.from(empresasSel).join(', ') : 'Todas las empresas';
+}
+
+function llenarEmpresas(valores) {
+  empresasOpc = valores;
+  empresasSel.forEach(c => { if (valores.indexOf(c) === -1) empresasSel.delete(c); });
+  pintarOpcionesEmpresas();
+  etiquetaEmpresas();
+}
+
+function cargar() {
+  const params = {
+    empresas: empresasSel.size ? Array.from(empresasSel) : null,
+    tipoEnvio: document.getElementById('f-tipo').value || null,
+    proveedor: document.getElementById('f-proveedor').value || null,
+    donVeloz: document.getElementById('f-donveloz').value || null,
+    etaDesde: document.getElementById('f-eta-desde').value || null,
+    etaHasta: document.getElementById('f-eta-hasta').value || null,
+    etapa: filtroEtapa ? filtroEtapa.clave : null,
+    evento: filtroEvento ? filtroEvento.codigo : null
+  };
+  document.getElementById('contenido').classList.add('cargando');
+  document.getElementById('error').style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(pintar)
+    .withFailureHandler(function(e) {
+      document.getElementById('contenido').classList.remove('cargando');
+      const el = document.getElementById('error');
+      el.textContent = 'Error al cargar datos: ' + e.message;
+      el.style.display = 'block';
+    })
+    .getBacklogData(params);
+}
+
+function pintar(d) {
+  llenarEmpresas(d.opciones.empresas);
+  llenarSelect('f-tipo', d.opciones.tiposEnvio, document.getElementById('f-tipo').value);
+  llenarSelect('f-proveedor', d.opciones.proveedores, document.getElementById('f-proveedor').value);
+  llenarSelect('f-donveloz', d.opciones.donVeloces, document.getElementById('f-donveloz').value);
+
+  pintarKpis(d.kpis);
+  graficaDona(d.porAging, d.kpis.total);
+  graficaEtapa(d.porEtapa);
+
+  datosFechaDiaria = d.porFecha;
+  graficaFecha();
+
+  datosProveedor = d.porProveedor;
+  pintarProveedores();
+  datosCliente = d.porCliente;
+  pintarClientes();
+  datosEvento = d.porEvento;
+  pintarEventos();
+
+  datosDetalle = d.detalle;
+  document.getElementById('top-n').textContent = d.detalle.length;
+  pintarDetalle();
+
+  renderChips();
+
+  document.getElementById('actualizado').textContent = 'Actualizado: ' + d.generadoEn +
+    ' · ' + d.totalBacklog + ' folios en backlog de ' + d.totalEnHoja + ' en la hoja';
+  document.getElementById('contenido').classList.remove('cargando');
+}
+
+// ── Filtros activos (chips): resume en un solo lugar los filtros de la barra superior
+// y los que vienen de clickear una fila (etapa/evento, que no tienen control propio) ──
+function chipsActivos() {
+  const chips = [];
+  if (empresasSel.size) {
+    chips.push({ tipo: 'empresas',
+      etiqueta: 'Empresa: ' + (empresasSel.size === 1 ? Array.from(empresasSel)[0] : empresasSel.size + ' seleccionadas') });
+  }
+  const tipo = document.getElementById('f-tipo').value;
+  if (tipo) chips.push({ tipo: 'tipo', etiqueta: 'Tipo de envío: ' + tipo });
+  const prov = document.getElementById('f-proveedor').value;
+  if (prov) chips.push({ tipo: 'proveedor', etiqueta: 'Proveedor: ' + prov });
+  const dv = document.getElementById('f-donveloz').value;
+  if (dv) chips.push({ tipo: 'donveloz', etiqueta: 'Don Veloz: ' + dv });
+  const ed = document.getElementById('f-eta-desde').value, eh = document.getElementById('f-eta-hasta').value;
+  if (ed || eh) chips.push({ tipo: 'eta', etiqueta: 'ETA: ' + (ed || '…') + ' – ' + (eh || '…') });
+  if (filtroEtapa) chips.push({ tipo: 'etapa', etiqueta: 'Etapa: ' + filtroEtapa.etiqueta });
+  if (filtroEvento) chips.push({ tipo: 'evento', etiqueta: 'Evento: ' + filtroEvento.codigo + ' (' + filtroEvento.etapa + ')' });
+  return chips;
+}
+
+function renderChips() {
+  const chips = chipsActivos();
+  const cont = document.getElementById('chips-filtro');
+  cont.classList.toggle('oculto', chips.length === 0);
+  cont.innerHTML = chips.map(c =>
+    '<span class="chip-filtro">' + c.etiqueta +
+    '<button type="button" data-quitar="' + c.tipo + '" title="Quitar filtro">✕</button></span>'
+  ).join('') + (chips.length > 1 ? '<button type="button" class="ver-tabla" id="btn-limpiar-todo">Limpiar todos</button>' : '');
+}
+
+function quitarFiltro(tipo) {
+  if (tipo === 'empresas') { empresasSel.clear(); pintarOpcionesEmpresas(); etiquetaEmpresas(); }
+  else if (tipo === 'tipo') document.getElementById('f-tipo').value = '';
+  else if (tipo === 'proveedor') document.getElementById('f-proveedor').value = '';
+  else if (tipo === 'donveloz') document.getElementById('f-donveloz').value = '';
+  else if (tipo === 'eta') { document.getElementById('f-eta-desde').value = ''; document.getElementById('f-eta-hasta').value = ''; }
+  else if (tipo === 'etapa') filtroEtapa = null;
+  else if (tipo === 'evento') filtroEvento = null;
+  cargar();
+}
+
+function limpiarFiltros() {
+  empresasSel.clear();
+  pintarOpcionesEmpresas();
+  etiquetaEmpresas();
+  document.getElementById('f-tipo').value = '';
+  document.getElementById('f-proveedor').value = '';
+  document.getElementById('f-donveloz').value = '';
+  document.getElementById('f-eta-desde').value = '';
+  document.getElementById('f-eta-hasta').value = '';
+  filtroEtapa = null;
+  filtroEvento = null;
+  cargar();
+}
+
+document.getElementById('chips-filtro').addEventListener('click', function(e) {
+  if (e.target.closest('#btn-limpiar-todo')) { limpiarFiltros(); return; }
+  const btn = e.target.closest('button[data-quitar]');
+  if (btn) quitarFiltro(btn.dataset.quitar);
+});
+
+document.getElementById('btn-aplicar').addEventListener('click', cargar);
+document.getElementById('btn-f-dia').addEventListener('click', () => cambiarGranFecha('dia'));
+document.getElementById('btn-f-semana').addEventListener('click', () => cambiarGranFecha('semana'));
+document.getElementById('btn-f-mes').addEventListener('click', () => cambiarGranFecha('mes'));
+
+document.getElementById('t-detalle').addEventListener('click', function(e) {
+  const th = e.target.closest('th[data-key]');
+  if (!th) return;
+  const k = th.dataset.key;
+  if (sortDetalle.key === k) sortDetalle.dir = -sortDetalle.dir;
+  else sortDetalle = { key: k, dir: -1 };
+  pintarDetalle();
+});
+
+document.getElementById('btn-copiar-folios').addEventListener('click', function() {
+  const lista = ordenar(datosDetalle, sortDetalle).map(f => f.folio).join('\n');
+  copiarTexto(lista, this);
+});
+
+document.getElementById('f-empresa-btn').addEventListener('click', function(e) {
+  e.stopPropagation();
+  document.getElementById('f-empresa-panel').classList.toggle('oculto');
+});
+document.getElementById('f-empresa-panel').addEventListener('click', e => e.stopPropagation());
+document.getElementById('f-empresa-buscar').addEventListener('input', pintarOpcionesEmpresas);
+document.getElementById('f-empresa-opciones').addEventListener('change', function(e) {
+  if (e.target.type !== 'checkbox') return;
+  if (e.target.checked) empresasSel.add(e.target.value);
+  else empresasSel.delete(e.target.value);
+  etiquetaEmpresas();
+});
+document.getElementById('f-empresa-limpiar').addEventListener('click', function() {
+  empresasSel.clear();
+  pintarOpcionesEmpresas();
+  etiquetaEmpresas();
+});
+document.addEventListener('click', function() {
+  document.getElementById('f-empresa-panel').classList.add('oculto');
+});
+
+document.querySelectorAll('.ver-tabla[data-tabla]').forEach(btn =>
+  btn.addEventListener('click', function() {
+    const t = document.getElementById(this.dataset.tabla);
+    const card = this.closest('.card');
+    const plot = card.querySelector('.plot-scroll') || card.querySelector('.plot');
+    const mostrar = t.classList.contains('oculto');
+    t.classList.toggle('oculto', !mostrar);
+    plot.classList.toggle('oculto', mostrar);
+    this.textContent = mostrar ? 'Ver gráfica' : 'Ver tabla';
+  })
+);
+
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', cargar);
+
+cargar();
+</script>
+</body>
+</html>
