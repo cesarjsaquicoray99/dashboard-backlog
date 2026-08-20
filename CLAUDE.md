@@ -86,6 +86,15 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   del dashboard), duplicadas y peleando por el mismo espacio dentro del canvas chico; por
   eso se veía amontonada. Si se vuelve a tocar esta gráfica, la leyenda nativa debe quedar
   `display: false` — la real es siempre `#lista-aging`.
+  Segundo problema encontrado el mismo día (el fix de la leyenda no lo resolvía): el texto
+  del centro (plugin `textoCentro`) tenía tamaño de fuente y separación entre líneas en
+  **píxeles fijos** (22px / 11px), sin relación al radio real del agujero de la dona — si el
+  anillo renderizado terminaba más chico de lo asumido, "3%" y "críticos" se apretaban y se
+  superponían. Se corrigió calculando el tamaño de fuente y el desplazamiento vertical como
+  fracción de `arco.innerRadius` (el radio real del hueco en ese render), así se adapta solo
+  sin importar el tamaño final de la dona. Si se vuelve a ver texto superpuesto ahí, revisar
+  primero si `innerRadius` está disponible en `chart.getDatasetMeta(0).data[0]` (cambia entre
+  versiones de Chart.js).
 - **Backlog por etapa**: barra apilada (etapa × aging), con tabla accesible ("Ver tabla").
 - **Backlog por último movimiento** y **Backlog por ETA**: dos tarjetas separadas (hasta el
   20 ago 2026 eran una sola, "Evolución del backlog", basada solo en último evento; el

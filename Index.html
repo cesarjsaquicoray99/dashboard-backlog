@@ -346,16 +346,23 @@ const textoCentro = {
     if (!t || t.valor == null) return;
     const a = chart.chartArea;
     const cx = (a.left + a.right) / 2, cy = (a.top + a.bottom) / 2;
+    // Tamaño de fuente y separación entre líneas proporcionales al radio real del agujero
+    // (no píxeles fijos) — si el anillo termina siendo chico o grande según el layout, el
+    // texto se sigue viendo bien en vez de apretarse/superponerse.
+    const arco = chart.getDatasetMeta(0).data[0];
+    const radio = arco ? arco.innerRadius : Math.min(a.right - a.left, a.bottom - a.top) / 2;
+    const fValor = Math.max(13, Math.min(24, Math.round(radio * 0.46)));
+    const fSub = Math.max(9, Math.round(fValor * 0.48));
     const ctx = chart.ctx;
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.font = '600 ' + fValor + 'px system-ui, sans-serif';
     ctx.fillStyle = css('--text-primary');
-    ctx.fillText(t.valor, cx, cy - 8);
-    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(t.valor, cx, cy - fValor * 0.42);
+    ctx.font = fSub + 'px system-ui, sans-serif';
     ctx.fillStyle = css('--text-muted');
-    ctx.fillText(t.sub, cx, cy + 12);
+    ctx.fillText(t.sub, cx, cy + fValor * 0.55);
     ctx.restore();
   }
 };
