@@ -81,6 +81,11 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   clasificar); debajo, **Backlog por etapa** y la **dona de antigüedad** comparten fila
   (`.inicio-grid`, 2fr/1fr) — reordenado el 20 ago 2026 a pedido del usuario (antes las
   tiles compartían fila con la dona y la etapa iba sola debajo).
+- **Dona de antigüedad**: `legend: { display: false }` en las options de Chart.js — tenía
+  la leyenda nativa activada A LA VEZ que `#lista-aging` (el HTML propio que ya usa el resto
+  del dashboard), duplicadas y peleando por el mismo espacio dentro del canvas chico; por
+  eso se veía amontonada. Si se vuelve a tocar esta gráfica, la leyenda nativa debe quedar
+  `display: false` — la real es siempre `#lista-aging`.
 - **Backlog por etapa**: barra apilada (etapa × aging), con tabla accesible ("Ver tabla").
 - **Evolución del backlog**: barras (con data labels) de folios en backlog agrupados por la fecha de su
   `Último evento: Fecha`, con toggle Día/Semana/Mes. **Importante**: esto NO es una serie
