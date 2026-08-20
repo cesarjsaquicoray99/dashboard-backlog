@@ -6,11 +6,13 @@ const CONFIG = {
 };
 
 // Etapas del backlog, resueltas por los 4 primeros caracteres de "Último evento: Evento"
-// (mapeo confirmado por el usuario, 13 ago 2026). Un código que no aparezca aquí y que
-// tampoco sea terminal cae en "Otro / sin clasificar" — revisar con debugEventos().
+// (mapeo confirmado por el usuario, 13 ago 2026; 3003 movido de Almacén a Traslado a
+// Partner el 20 ago 2026 — es el código de cuando el partner ya lo tiene). Un código que
+// no aparezca aquí y que tampoco sea terminal cae en "Otro / sin clasificar" — revisar
+// con debugEventos().
 const ETAPAS = [
-  { clave: 'almacen',              etiqueta: 'Almacén (WH)',                 codigos: ['3001', '3002', '3003'] },
-  { clave: 'traslado_partner',     etiqueta: 'Traslado a Partner (SP)',      codigos: ['3004'] },
+  { clave: 'almacen',              etiqueta: 'Almacén (WH)',                 codigos: ['3001', '3002'] },
+  { clave: 'traslado_partner',     etiqueta: 'Traslado a Partner (SP)',      codigos: ['3003', '3004'] },
   { clave: 'en_ruta',              etiqueta: 'En ruta (LM)',                 codigos: ['4001'] },
   { clave: 'fallado',              etiqueta: 'Fallado (LM)',                 codigos: ['4101'] },
   { clave: 'en_camino_devolucion', etiqueta: 'En camino a Devolución (TBD)', codigos: ['5101'] }

@@ -49,8 +49,10 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   (columna vacía) están **excluidos** del backlog (decisión explícita del usuario, no son
   "recién creados en backlog").
 - **Etapas** (mapeadas por el mismo código de 4 caracteres, ver `ETAPAS` en `Code.gs`):
-  - `3001`/`3002`/`3003` → Almacén (WH)
-  - `3004` → Traslado a Partner (SP)
+  - `3001`/`3002` → Almacén (WH)
+  - `3003`/`3004` → Traslado a Partner (SP) — `3003` movido aquí el 20 ago 2026 (decisión
+    del usuario: es el código de cuando el partner ya tiene el folio, no cuando sigue en
+    almacén)
   - `4001` → En ruta (LM)
   - `4101` → Fallado (LM) — no es terminal, sigue en backlog (se reasigna)
   - `5101` → En camino a Devolución (TBD)
