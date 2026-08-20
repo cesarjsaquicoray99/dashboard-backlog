@@ -87,19 +87,35 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   eso se veía amontonada. Si se vuelve a tocar esta gráfica, la leyenda nativa debe quedar
   `display: false` — la real es siempre `#lista-aging`.
 - **Backlog por etapa**: barra apilada (etapa × aging), con tabla accesible ("Ver tabla").
-- **Evolución del backlog**: barras (con data labels) de folios en backlog agrupados por la fecha de su
-  `Último evento: Fecha`, con toggle Día/Semana/Mes. **Importante**: esto NO es una serie
-  histórica del tamaño del backlog día a día (no hay snapshots del pasado, solo el estado
-  actual de cada folio) — es la distribución de folios *que siguen en backlog hoy* según
-  cuándo se atascaron. El backend (`porFecha_`) manda solo el detalle diario; el frontend
-  re-agrupa a semana (lunes ISO) o mes sin volver a pedir datos al servidor, mismo patrón
-  de buckets diarios + toggle que ya usa `KPI_Dashboard`. **Eje X agrupado por mes** (20 ago
-  2026, plugin casero `ejeAgrupado` en `Index.html`): en Día el eje muestra el número de día
-  y en Semana el número de semana ISO ("Wnn"), con una fila debajo con el nombre del mes y
-  una línea separadora en cada cambio de mes; en Mes cada barra ya es un mes, así que se
-  oculta la fila de ticks primaria y solo queda esa fila (nombre del mes + separador entre
-  cada una). La agrupación asume que `porFecha_`/`agregarFecha` vienen ordenados por fecha
-  (tramos de mes contiguos, sin huecos) — si eso cambia, `gruposPorMes` deja de servir.
+- **Backlog por último movimiento** y **Backlog por ETA**: dos tarjetas separadas (hasta el
+  20 ago 2026 eran una sola, "Evolución del backlog", basada solo en último evento; el
+  usuario pidió que el eje X fuera la fecha ETA y, en vez de reemplazar, se separó en dos
+  vistas porque miden cosas distintas — no cambiarlas de nuevo a una sola sin confirmar con
+  el usuario):
+  - **Por último movimiento** (`porUltimoEvento_` en `Code.gs`): folios agrupados por
+    `Último evento: Fecha` — mide cuándo se atascó cada folio, "qué tan frío" está.
+    **Importante**: NO es una serie histórica del tamaño del backlog día a día (no hay
+    snapshots del pasado, solo el estado actual de cada folio) — es la distribución de
+    folios *que siguen en backlog hoy* según cuándo se atascaron.
+  - **Por ETA** (`porEta_` en `Code.gs`, agregada 20 ago 2026): folios agrupados por
+    `ETA Cliente: Fecha` — para cuándo estaba prometida la entrega. Folios sin ETA quedan
+    fuera de esta vista (no se pueden ubicar en el eje) — a diferencia de los filtros de la
+    barra superior, donde folios sin ETA sí se incluyen salvo que el filtro de fecha esté
+    activo (ver "Definiciones de negocio" arriba); son dos cosas distintas.
+  - Ambas comparten toggle Día/Semana/Mes sin volver a pedir datos al servidor, vía la
+    fábrica `crearSerieTemporal(prefijo)` en `Index.html` (reemplazó las funciones sueltas
+    `graficaFecha`/`cambiarGranFecha` de una sola instancia) — cada instancia tiene su
+    propio estado y sus propios ids en el DOM: canvas `ch-<prefijo>`, botones
+    `btn-<prefijo>-dia/semana/mes`, tabla `t-<prefijo>` (prefijos actuales: `ultmov`, `eta`).
+    Si se agrega una tercera serie temporal, se llama `crearSerieTemporal('<prefijo-nuevo>')`
+    con sus botones/canvas/tabla ya en el HTML — no hay que duplicar la lógica.
+  - **Eje X agrupado por mes** (plugin casero `ejeAgrupado` en `Index.html`, compartido por
+    ambas): en Día el eje muestra el número de día y en Semana el número de semana ISO
+    ("Wnn"), con una fila debajo con el nombre del mes y una línea separadora en cada cambio
+    de mes; en Mes cada barra ya es un mes, así que se oculta la fila de ticks primaria y
+    solo queda esa fila (nombre del mes + separador entre cada una). La agrupación asume que
+    los datos del backend vienen ordenados por fecha (tramos de mes contiguos, sin huecos) —
+    si eso cambia, `gruposPorMes` deja de servir.
 - **Backlog por cliente** / **Backlog por proveedor**: tablas ordenables (clic en encabezado),
   mismo desglose de aging que la etapa (`porCliente_`/`porProveedor_` en `Code.gs`).
 - **Backlog por evento**: tabla ordenable por el código crudo de 4 caracteres (sin pasar por

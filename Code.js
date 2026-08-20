@@ -274,13 +274,28 @@ function porEvento_(folios) {
 }
 
 // Backlog agrupado por el día calendario de "Último evento: Fecha" (folios sin esa fecha
-// quedan fuera, igual que en el aging). Se manda solo el detalle diario; el frontend
-// re-agrupa a semana/mes (mismo patrón de buckets diarios + toggle que KPI_Dashboard).
-function porFecha_(folios) {
+// quedan fuera, igual que en el aging) — cuándo se atascó cada folio, mide "qué tan frío"
+// está. Se manda solo el detalle diario; el frontend re-agrupa a semana/mes (mismo patrón
+// de buckets diarios + toggle que KPI_Dashboard).
+function porUltimoEvento_(folios) {
   const por = {};
   folios.forEach(function(f) {
     if (!f.ultimoEventoFecha) return;
     const clave = Utilities.formatDate(f.ultimoEventoFecha, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    por[clave] = (por[clave] || 0) + 1;
+  });
+  return Object.keys(por).sort().map(function(fecha) { return { fecha: fecha, total: por[fecha] }; });
+}
+
+// Backlog agrupado por el día calendario de "ETA Cliente: Fecha" (agregado 20 ago 2026 —
+// antes "Evolución del backlog" usaba Último evento para esto; son datos distintos: esta
+// vista es para cuándo estaba prometida la entrega, no para cuándo se atascó el folio).
+// Folios sin ETA quedan fuera de esta vista específica (no se puede ubicar en el eje).
+function porEta_(folios) {
+  const por = {};
+  folios.forEach(function(f) {
+    if (!f.eta) return;
+    const clave = Utilities.formatDate(f.eta, Session.getScriptTimeZone(), 'yyyy-MM-dd');
     por[clave] = (por[clave] || 0) + 1;
   });
   return Object.keys(por).sort().map(function(fecha) { return { fecha: fecha, total: por[fecha] }; });
@@ -365,7 +380,8 @@ function getBacklogData(params) {
     porProveedor: porProveedor_(enriquecidos),
     porCliente: porCliente_(enriquecidos),
     porEvento: porEvento_(enriquecidos),
-    porFecha: porFecha_(enriquecidos),
+    porUltimoEvento: porUltimoEvento_(enriquecidos),
+    porEta: porEta_(enriquecidos),
     porAging: porAging_(enriquecidos),
     detalle: detalleMasAntiguos_(enriquecidos),
     generadoEn: Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
