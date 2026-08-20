@@ -203,7 +203,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     </div>
   </div>
   <div class="filtro"><label>Tipo de envío</label><select id="f-tipo"><option value="">Todos</option></select></div>
-  <div class="filtro"><label>Proveedor</label><select id="f-proveedor"><option value="">Todos</option></select></div>
+  <div class="filtro"><label>Proveedor</label>
+    <div class="multisel" id="f-proveedor-box">
+      <button type="button" id="f-proveedor-btn">Todos</button>
+      <div class="multisel-panel oculto" id="f-proveedor-panel">
+        <input type="text" id="f-proveedor-buscar" placeholder="Buscar proveedor…">
+        <div class="multisel-opciones" id="f-proveedor-opciones"></div>
+        <button type="button" class="multisel-limpiar" id="f-proveedor-limpiar">Limpiar selección</button>
+      </div>
+    </div>
+  </div>
   <div class="filtro"><label>Don Veloz</label><select id="f-donveloz"><option value="">Todos</option></select></div>
   <div class="filtro filtro-check">
     <input type="checkbox" id="f-no-intentado">
@@ -534,16 +543,20 @@ function graficaEtapa(porEtapa) {
   pintarTablaEtapa(porEtapa);
 }
 
-let filtroEtapa = null;  // { clave, etiqueta } | null — seteado al clickear una fila de t-etapa
-let filtroEvento = null; // { codigo, etapa } | null — seteado al clickear una fila de t-evento
+// Multi-selección por clic en fila (etapa/evento no tienen control propio en la barra de
+// filtros): Set de claves/códigos + un mapa aparte con la etiqueta a mostrar de cada uno
+// (para los chips), ya que el Set solo guarda el valor "crudo" usado para filtrar.
+let etapasSel = new Set();
+let etapasEtiquetas = {};
+let eventosSel = new Set();
+let eventosEtapas = {};
 
 function pintarTablaEtapa(porEtapa) {
-  const activo = filtroEtapa ? filtroEtapa.clave : null;
   const conSinAging = porEtapa.some(e => e.sinAging > 0);
   const cabeceras = ['Etapa'].concat(BUCKETS_AGING.map(b => b.etiqueta)).concat(conSinAging ? ['Sin fecha'] : []).concat(['Total']);
   document.getElementById('t-etapa').innerHTML =
     '<table><thead><tr>' + cabeceras.map((c, i) => '<th class="' + (i ? 'num' : '') + '">' + c + '</th>').join('') + '</tr></thead><tbody>' +
-    porEtapa.map(e => '<tr class="fila-filtrable' + (activo === e.etapa ? ' activa' : '') + '" data-valor="' + esc(e.etapa) + '">' +
+    porEtapa.map(e => '<tr class="fila-filtrable' + (etapasSel.has(e.etapa) ? ' activa' : '') + '" data-valor="' + esc(e.etapa) + '">' +
       '<td>' + e.etiqueta + '</td>' +
       BUCKETS_AGING.map(b => '<td class="num">' + e[b.clave] + '</td>').join('') +
       (conSinAging ? '<td class="num">' + e.sinAging + '</td>' : '') +
@@ -732,9 +745,9 @@ let datosEvento = [], sortEvento = { key: 'total', dir: -1 };
 
 function esc(s) { return String(s).replace(/"/g, '&quot;'); }
 
-// `activo` es el valor (crudo) de la columna identificadora que está filtrando ahora
-// mismo, si hay alguno — solo para resaltar la fila correspondiente.
-function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
+// `activoSel` es el Set de valores (crudos) de la columna identificadora que están
+// filtrando ahora mismo — solo para resaltar las filas correspondientes.
+function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activoSel) {
   const conSinAging = datos.some(d => d.sinAging > 0);
   const cols = colsIdentidad.concat(BUCKETS_AGING.map(b => [b.clave, b.etiqueta, true]))
     .concat(conSinAging ? [['sinAging', 'Sin fecha', true]] : [])
@@ -743,7 +756,7 @@ function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
   const claveFiltro = colsIdentidad[0][0];
   document.getElementById(contId).innerHTML =
     '<table><thead>' + cabecerasHtml(cols, s) + '</thead><tbody>' +
-    lista.map(d => '<tr class="fila-filtrable' + (activo != null && activo === d[claveFiltro] ? ' activa' : '') +
+    lista.map(d => '<tr class="fila-filtrable' + (activoSel && activoSel.has(d[claveFiltro]) ? ' activa' : '') +
       '" data-valor="' + esc(d[claveFiltro]) + '">' +
       colsIdentidad.map(c => '<td>' + d[c[0]] + '</td>').join('') +
       BUCKETS_AGING.map(b => '<td class="num">' + d[b.clave] + '</td>').join('') +
@@ -754,16 +767,13 @@ function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
 }
 
 function pintarProveedores() {
-  const activo = document.getElementById('f-proveedor').value || null;
-  pintarTablaAgrupada('t-proveedor', datosProveedor, sortProveedor, [['proveedor', 'Proveedor']], activo);
+  pintarTablaAgrupada('t-proveedor', datosProveedor, sortProveedor, [['proveedor', 'Proveedor']], proveedoresMS.sel);
 }
 function pintarClientes() {
-  const activo = empresasSel.size === 1 ? Array.from(empresasSel)[0] : null;
-  pintarTablaAgrupada('t-cliente', datosCliente, sortCliente, [['empresa', 'Empresa']], activo);
+  pintarTablaAgrupada('t-cliente', datosCliente, sortCliente, [['empresa', 'Empresa']], empresasMS.sel);
 }
 function pintarEventos() {
-  const activo = filtroEvento ? filtroEvento.codigo : null;
-  pintarTablaAgrupada('t-evento', datosEvento, sortEvento, [['codigo', 'Código'], ['etapa', 'Etapa']], activo);
+  pintarTablaAgrupada('t-evento', datosEvento, sortEvento, [['codigo', 'Código'], ['etapa', 'Etapa']], eventosSel);
 }
 
 // Delegado por tabla: clic en un `th[data-key]` ordena (si la tabla tiene sort configurado);
@@ -786,35 +796,26 @@ function wireTabla(contId, cfg) {
 
 wireTabla('t-proveedor', {
   obtenerSort: () => sortProveedor, fijarSort: s => sortProveedor = s, repintar: pintarProveedores,
-  onFilaClick: function(valor) {
-    const sel = document.getElementById('f-proveedor');
-    sel.value = sel.value === valor ? '' : valor;
-    cargar();
-  }
+  onFilaClick: function(valor) { proveedoresMS.alternar(valor); cargar(); }
 });
 wireTabla('t-cliente', {
   obtenerSort: () => sortCliente, fijarSort: s => sortCliente = s, repintar: pintarClientes,
-  onFilaClick: function(valor) {
-    const yaActivo = empresasSel.size === 1 && empresasSel.has(valor);
-    empresasSel.clear();
-    if (!yaActivo) empresasSel.add(valor);
-    pintarOpcionesEmpresas();
-    etiquetaEmpresas();
-    cargar();
-  }
+  onFilaClick: function(valor) { empresasMS.alternar(valor); cargar(); }
 });
 wireTabla('t-evento', {
   obtenerSort: () => sortEvento, fijarSort: s => sortEvento = s, repintar: pintarEventos,
   onFilaClick: function(valor, fila) {
     const etapaTexto = fila.children[1] ? fila.children[1].textContent : '';
-    filtroEvento = (filtroEvento && filtroEvento.codigo === valor) ? null : { codigo: valor, etapa: etapaTexto };
+    if (eventosSel.has(valor)) eventosSel.delete(valor);
+    else { eventosSel.add(valor); eventosEtapas[valor] = etapaTexto; }
     cargar();
   }
 });
 wireTabla('t-etapa', {
   onFilaClick: function(valor, fila) {
     const etiqueta = fila.children[0] ? fila.children[0].textContent : valor;
-    filtroEtapa = (filtroEtapa && filtroEtapa.clave === valor) ? null : { clave: valor, etiqueta: etiqueta };
+    if (etapasSel.has(valor)) etapasSel.delete(valor);
+    else { etapasSel.add(valor); etapasEtiquetas[valor] = etiqueta; }
     cargar();
   }
 });
@@ -847,48 +848,87 @@ function llenarSelect(id, valores, actual) {
     '<option' + (v === actual ? ' selected' : '') + '>' + v + '</option>').join('');
 }
 
-// ── Multiselect de empresas ──
-let empresasSel = new Set();
-let empresasOpc = [];
+// ── Multiselect genérico de checkboxes con buscador (Empresa y Proveedor comparten esta
+// misma fábrica; cada instancia tiene su propio Set y su propio panel en el DOM, buscados
+// por el prefijo de sus ids: f-<prefijo>-btn/panel/buscar/opciones/limpiar) ──
+function crearMultisel(prefijo, todas, plural) {
+  const sel = new Set();
+  let opciones = [];
+  const el = sufijo => document.getElementById(prefijo + '-' + sufijo);
 
-function pintarOpcionesEmpresas() {
-  const q = (document.getElementById('f-empresa-buscar').value || '').trim().toLowerCase();
-  const visibles = empresasOpc
-    .filter(c => !q || c.toLowerCase().indexOf(q) !== -1)
-    .slice().sort((a, b) => a.localeCompare(b));
-  document.getElementById('f-empresa-opciones').innerHTML = visibles.length
-    ? visibles.map(c =>
-        '<label class="multisel-op"><input type="checkbox" value="' + c.replace(/"/g, '&quot;') + '"' +
-        (empresasSel.has(c) ? ' checked' : '') + '><span>' + c + '</span></label>').join('')
-    : '<div class="nota" style="padding:4px 6px">Sin coincidencias</div>';
+  function pintarOpciones() {
+    const q = (el('buscar').value || '').trim().toLowerCase();
+    const visibles = opciones
+      .filter(c => !q || c.toLowerCase().indexOf(q) !== -1)
+      .slice().sort((a, b) => a.localeCompare(b));
+    el('opciones').innerHTML = visibles.length
+      ? visibles.map(c =>
+          '<label class="multisel-op"><input type="checkbox" value="' + esc(c) + '"' +
+          (sel.has(c) ? ' checked' : '') + '><span>' + c + '</span></label>').join('')
+      : '<div class="nota" style="padding:4px 6px">Sin coincidencias</div>';
+  }
+
+  function etiqueta() {
+    const btn = el('btn');
+    btn.textContent = sel.size === 0 ? todas
+      : sel.size === 1 ? Array.from(sel)[0]
+      : sel.size + ' ' + plural;
+    btn.title = sel.size ? Array.from(sel).join(', ') : todas;
+  }
+
+  function llenarOpciones(valores) {
+    opciones = valores;
+    sel.forEach(c => { if (valores.indexOf(c) === -1) sel.delete(c); });
+    pintarOpciones();
+    etiqueta();
+  }
+
+  function alternar(valor) {
+    if (sel.has(valor)) sel.delete(valor); else sel.add(valor);
+    pintarOpciones();
+    etiqueta();
+  }
+
+  function limpiar() {
+    sel.clear();
+    pintarOpciones();
+    etiqueta();
+  }
+
+  el('btn').addEventListener('click', function(e) {
+    e.stopPropagation();
+    el('panel').classList.toggle('oculto');
+  });
+  el('panel').addEventListener('click', e => e.stopPropagation());
+  el('buscar').addEventListener('input', pintarOpciones);
+  el('opciones').addEventListener('change', function(e) {
+    if (e.target.type !== 'checkbox') return;
+    if (e.target.checked) sel.add(e.target.value); else sel.delete(e.target.value);
+    etiqueta();
+  });
+  el('limpiar').addEventListener('click', limpiar);
+
+  return { sel, llenarOpciones, alternar, limpiar };
 }
 
-function etiquetaEmpresas() {
-  const btn = document.getElementById('f-empresa-btn');
-  btn.textContent = empresasSel.size === 0 ? 'Todas'
-    : empresasSel.size === 1 ? Array.from(empresasSel)[0]
-    : empresasSel.size + ' empresas';
-  btn.title = empresasSel.size ? Array.from(empresasSel).join(', ') : 'Todas las empresas';
-}
+const empresasMS = crearMultisel('f-empresa', 'Todas', 'empresas');
+const proveedoresMS = crearMultisel('f-proveedor', 'Todos', 'proveedores');
 
-function llenarEmpresas(valores) {
-  empresasOpc = valores;
-  empresasSel.forEach(c => { if (valores.indexOf(c) === -1) empresasSel.delete(c); });
-  pintarOpcionesEmpresas();
-  etiquetaEmpresas();
-}
+document.addEventListener('click', function() {
+  document.querySelectorAll('.multisel-panel').forEach(p => p.classList.add('oculto'));
+});
 
 function cargar() {
   const params = {
-    empresas: empresasSel.size ? Array.from(empresasSel) : null,
+    empresas: empresasMS.sel.size ? Array.from(empresasMS.sel) : null,
     tipoEnvio: document.getElementById('f-tipo').value || null,
-    proveedor: document.getElementById('f-proveedor').value || null,
+    proveedores: proveedoresMS.sel.size ? Array.from(proveedoresMS.sel) : null,
     donVeloz: document.getElementById('f-donveloz').value || null,
     noIntentado: document.getElementById('f-no-intentado').checked || null,
     etaDesde: document.getElementById('f-eta-desde').value || null,
     etaHasta: document.getElementById('f-eta-hasta').value || null,
-    etapa: filtroEtapa ? filtroEtapa.clave : null,
-    evento: filtroEvento ? filtroEvento.codigo : null
+    etapas: etapasSel.size ? Array.from(etapasSel) : null,
+    eventos: eventosSel.size ? Array.from(eventosSel) : null
   };
   document.getElementById('contenido').classList.add('cargando');
   document.getElementById('error').style.display = 'none';
@@ -905,9 +945,9 @@ function cargar() {
 }
 
 function pintar(d) {
-  llenarEmpresas(d.opciones.empresas);
+  empresasMS.llenarOpciones(d.opciones.empresas);
   llenarSelect('f-tipo', d.opciones.tiposEnvio, document.getElementById('f-tipo').value);
-  llenarSelect('f-proveedor', d.opciones.proveedores, document.getElementById('f-proveedor').value);
+  proveedoresMS.llenarOpciones(d.opciones.proveedores);
   llenarSelect('f-donveloz', d.opciones.donVeloces, document.getElementById('f-donveloz').value);
 
   pintarKpis(d.kpis);
@@ -939,21 +979,24 @@ function pintar(d) {
 // y los que vienen de clickear una fila (etapa/evento, que no tienen control propio) ──
 function chipsActivos() {
   const chips = [];
-  if (empresasSel.size) {
+  if (empresasMS.sel.size) {
     chips.push({ tipo: 'empresas',
-      etiqueta: 'Empresa: ' + (empresasSel.size === 1 ? Array.from(empresasSel)[0] : empresasSel.size + ' seleccionadas') });
+      etiqueta: 'Empresa: ' + (empresasMS.sel.size === 1 ? Array.from(empresasMS.sel)[0] : empresasMS.sel.size + ' seleccionadas') });
   }
   const tipo = document.getElementById('f-tipo').value;
   if (tipo) chips.push({ tipo: 'tipo', etiqueta: 'Tipo de envío: ' + tipo });
-  const prov = document.getElementById('f-proveedor').value;
-  if (prov) chips.push({ tipo: 'proveedor', etiqueta: 'Proveedor: ' + prov });
+  if (proveedoresMS.sel.size) {
+    chips.push({ tipo: 'proveedores',
+      etiqueta: 'Proveedor: ' + (proveedoresMS.sel.size === 1 ? Array.from(proveedoresMS.sel)[0] : proveedoresMS.sel.size + ' seleccionados') });
+  }
   const dv = document.getElementById('f-donveloz').value;
   if (dv) chips.push({ tipo: 'donveloz', etiqueta: 'Don Veloz: ' + dv });
   if (document.getElementById('f-no-intentado').checked) chips.push({ tipo: 'noIntentado', etiqueta: 'No intentados' });
   const ed = document.getElementById('f-eta-desde').value, eh = document.getElementById('f-eta-hasta').value;
   if (ed || eh) chips.push({ tipo: 'eta', etiqueta: 'ETA: ' + (ed || '…') + ' – ' + (eh || '…') });
-  if (filtroEtapa) chips.push({ tipo: 'etapa', etiqueta: 'Etapa: ' + filtroEtapa.etiqueta });
-  if (filtroEvento) chips.push({ tipo: 'evento', etiqueta: 'Evento: ' + filtroEvento.codigo + ' (' + filtroEvento.etapa + ')' });
+  etapasSel.forEach(clave => chips.push({ tipo: 'etapa:' + clave, etiqueta: 'Etapa: ' + etapasEtiquetas[clave] }));
+  eventosSel.forEach(codigo => chips.push({ tipo: 'evento:' + codigo,
+    etiqueta: 'Evento: ' + codigo + ' (' + eventosEtapas[codigo] + ')' }));
   return chips;
 }
 
@@ -968,29 +1011,27 @@ function renderChips() {
 }
 
 function quitarFiltro(tipo) {
-  if (tipo === 'empresas') { empresasSel.clear(); pintarOpcionesEmpresas(); etiquetaEmpresas(); }
+  if (tipo === 'empresas') empresasMS.limpiar();
   else if (tipo === 'tipo') document.getElementById('f-tipo').value = '';
-  else if (tipo === 'proveedor') document.getElementById('f-proveedor').value = '';
+  else if (tipo === 'proveedores') proveedoresMS.limpiar();
   else if (tipo === 'donveloz') document.getElementById('f-donveloz').value = '';
   else if (tipo === 'noIntentado') document.getElementById('f-no-intentado').checked = false;
   else if (tipo === 'eta') { document.getElementById('f-eta-desde').value = ''; document.getElementById('f-eta-hasta').value = ''; }
-  else if (tipo === 'etapa') filtroEtapa = null;
-  else if (tipo === 'evento') filtroEvento = null;
+  else if (tipo.indexOf('etapa:') === 0) etapasSel.delete(tipo.slice(6));
+  else if (tipo.indexOf('evento:') === 0) eventosSel.delete(tipo.slice(7));
   cargar();
 }
 
 function limpiarFiltros() {
-  empresasSel.clear();
-  pintarOpcionesEmpresas();
-  etiquetaEmpresas();
+  empresasMS.limpiar();
   document.getElementById('f-tipo').value = '';
-  document.getElementById('f-proveedor').value = '';
+  proveedoresMS.limpiar();
   document.getElementById('f-donveloz').value = '';
   document.getElementById('f-no-intentado').checked = false;
   document.getElementById('f-eta-desde').value = '';
   document.getElementById('f-eta-hasta').value = '';
-  filtroEtapa = null;
-  filtroEvento = null;
+  etapasSel.clear();
+  eventosSel.clear();
   cargar();
 }
 
@@ -1017,27 +1058,6 @@ document.getElementById('t-detalle').addEventListener('click', function(e) {
 document.getElementById('btn-copiar-folios').addEventListener('click', function() {
   const lista = ordenar(datosDetalle, sortDetalle).map(f => f.folio).join('\n');
   copiarTexto(lista, this);
-});
-
-document.getElementById('f-empresa-btn').addEventListener('click', function(e) {
-  e.stopPropagation();
-  document.getElementById('f-empresa-panel').classList.toggle('oculto');
-});
-document.getElementById('f-empresa-panel').addEventListener('click', e => e.stopPropagation());
-document.getElementById('f-empresa-buscar').addEventListener('input', pintarOpcionesEmpresas);
-document.getElementById('f-empresa-opciones').addEventListener('change', function(e) {
-  if (e.target.type !== 'checkbox') return;
-  if (e.target.checked) empresasSel.add(e.target.value);
-  else empresasSel.delete(e.target.value);
-  etiquetaEmpresas();
-});
-document.getElementById('f-empresa-limpiar').addEventListener('click', function() {
-  empresasSel.clear();
-  pintarOpcionesEmpresas();
-  etiquetaEmpresas();
-});
-document.addEventListener('click', function() {
-  document.getElementById('f-empresa-panel').classList.add('oculto');
 });
 
 document.querySelectorAll('.ver-tabla[data-tabla]').forEach(btn =>

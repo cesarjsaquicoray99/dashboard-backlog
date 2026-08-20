@@ -334,11 +334,11 @@ function getBacklogData(params) {
   const filtrados = enBacklog.filter(function(f) {
     if (params.empresas && params.empresas.length && params.empresas.indexOf(f.empresa) === -1) return false;
     if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
-    if (params.proveedor && f.proveedor !== params.proveedor) return false;
+    if (params.proveedores && params.proveedores.length && params.proveedores.indexOf(f.proveedor) === -1) return false;
     if (params.donVeloz && f.donVeloz !== params.donVeloz) return false;
     if (params.noIntentado && !f.noIntentado) return false;
-    if (params.etapa && etapaDe_(f.ultimoEvento).clave !== params.etapa) return false;
-    if (params.evento && f.ultimoEvento !== params.evento) return false;
+    if (params.etapas && params.etapas.length && params.etapas.indexOf(etapaDe_(f.ultimoEvento).clave) === -1) return false;
+    if (params.eventos && params.eventos.length && params.eventos.indexOf(f.ultimoEvento) === -1) return false;
     if (etaDesde && (!f.eta || f.eta < etaDesde)) return false;
     if (etaHasta && (!f.eta || f.eta > etaHasta)) return false;
     return true;

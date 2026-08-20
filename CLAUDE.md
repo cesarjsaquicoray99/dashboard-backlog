@@ -100,23 +100,38 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
 - **Folios más antiguos**: detalle a nivel de folio (top `CONFIG.TOP_DETALLE`), con copiado
   de la lista de folios al portapapeles.
 - Las tres tablas agrupadas (cliente/proveedor/evento) comparten el render `pintarTablaAgrupada()`
-  en `Index.html` — misma forma de datos desde el backend (`{reciente, atencion, critico,
+  en `Index.html` — misma forma de datos desde el backend (`{...claves de BUCKETS_AGING,
   sinAging, total, ...clave(s)}`), solo cambia la(s) columna(s) identificadora(s).
 
-## Filas de tabla como filtro (cross-filter)
-- Clic en una fila de **Cliente**, **Proveedor**, **Evento** o **Etapa** aplica ese valor
-  como filtro y recarga (`cargar()`); clic en la misma fila otra vez lo quita (toggle).
-  Cliente/Proveedor reusan los controles ya existentes en la barra de filtros (multiselect
-  de empresa / select de proveedor) — clickear la fila solo los setea. Etapa y Evento **no**
-  tienen control propio en la barra: viven en `filtroEtapa`/`filtroEvento` (variables de
-  frontend) y se mandan como `params.etapa`/`params.evento` a `getBacklogData`, que filtra
-  comparando contra `etapaDe_(f.ultimoEvento).clave` / `f.ultimoEvento` directamente.
-- **Chips de filtros activos** (`#chips-filtro`, debajo de la barra de filtros): resumen de
-  TODO lo que está filtrando ahora (incluye los controles de la barra Y los de fila-clic),
-  cada uno removible individualmente; "Limpiar todos" aparece si hay 2+ filtros activos.
-- La fila activa se resalta (`.fila-filtrable.activa`) comparando contra el valor actual del
-  control correspondiente (o de `filtroEtapa`/`filtroEvento`) — se recalcula en cada
-  `pintarProveedores()`/`pintarClientes()`/`pintarEventos()`/`pintarTablaEtapa()`.
+## Filas de tabla como filtro (cross-filter, multi-selección desde el 20 ago 2026)
+- Clic en una fila de **Cliente**, **Proveedor**, **Evento** o **Etapa** suma ese valor al
+  filtro (no lo reemplaza) y recarga (`cargar()`); clic en una fila ya activa la quita. Se
+  puede seleccionar más de un cliente/proveedor/etapa/evento a la vez — el filtro resultante
+  es la unión (OR) dentro de cada dimensión, AND entre dimensiones distintas. Antes (hasta
+  v8) clickear reemplazaba la selección completa; el cambio fue pedido explícitamente por
+  el usuario porque al clickear un segundo cliente se perdía el primero.
+- Las 4 dimensiones se guardan como `Set` en el frontend, nunca como un valor único:
+  - **Empresa** y **Proveedor**: cada uno tiene su propio widget multiselect (buscador +
+    checkboxes) en la barra de filtros, creados con la fábrica genérica `crearMultisel()`
+    en `Index.html` (antes solo Empresa tenía este widget; Proveedor era un `<select>`
+    simple — se unificó para poder acumular selección tanto desde la barra como desde la
+    fila de la tabla, sin dos mecanismos distintos para el mismo campo). `crearMultisel()`
+    devuelve `{ sel, llenarOpciones, alternar, limpiar }`; `sel` es el Set que comparten la
+    barra y el clic en fila.
+  - **Etapa** y **Evento** no tienen control propio en la barra (nunca lo tuvieron): viven
+    en `etapasSel`/`eventosSel` (Sets de clave/código) + `etapasEtiquetas`/`eventosEtapas`
+    (mapas clave→etiqueta, solo para poder mostrar el chip sin recalcularlo).
+  - Se mandan como `params.empresas`/`params.proveedores`/`params.etapas`/`params.eventos`
+    (arrays) a `getBacklogData`, que filtra con `indexOf(...) !== -1` contra cada uno
+    (mismo patrón para las 4, ver `Code.gs`).
+- **Chips de filtros activos** (`#chips-filtro`): Empresa/Proveedor muestran un solo chip
+  colapsado ("Proveedor: 3 seleccionados", igual que Empresa); Etapa/Evento muestran **un
+  chip por valor seleccionado** (no hay control de barra que los colapse) — cada chip se
+  quita individual con `tipo: 'etapa:<clave>'`/`'evento:<codigo>'`. "Limpiar todos" aparece
+  si hay 2+ filtros activos en total.
+- La fila activa se resalta (`.fila-filtrable.activa`) comparando contra el Set
+  correspondiente (`activoSel.has(...)` en `pintarTablaAgrupada()`/`pintarTablaEtapa()`),
+  no contra un valor único.
 - La tabla de "Folios más antiguos" (`t-detalle`) **no** es clicable como filtro — es el
   nivel de detalle final, no una dimensión de agrupación.
 
