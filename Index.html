@@ -172,6 +172,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chip-filtro button:hover { color: var(--status-critical); }
 
 .plot { position: relative; height: 260px; }
+.plot.evolucion { height: 300px; }
 .plot-scroll {
   max-height: 380px; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain;
@@ -250,7 +251,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         </div>
       </div>
       <div class="nota">Folios en backlog agrupados por la fecha de su último evento — no es un histórico del tamaño del backlog día a día, sino cuándo se atascó cada folio que sigue pendiente hoy.</div>
-      <div class="plot"><canvas id="ch-fecha"></canvas></div>
+      <div class="plot evolucion"><canvas id="ch-fecha"></canvas></div>
       <div class="tabla-scroll oculto" id="t-fecha"></div>
     </div>
   </div>
@@ -370,7 +371,42 @@ const etiquetaValorBarra = {
     ctx.restore();
   }
 };
-Chart.register(textoCentro, etiquetaTotalBarra, etiquetaValorBarra);
+// Fila agrupadora por mes debajo del eje X, con línea separadora vertical entre grupos
+// (usada por "Evolución del backlog": agrupa días/semanas por mes; en vista mensual cada
+// barra ya es un grupo de 1, así que la fila de ticks primaria se oculta y esta pasa a ser
+// la única fila visible).
+const ejeAgrupado = {
+  id: 'ejeAgrupado',
+  afterDraw(chart) {
+    const cfg = chart.options.plugins.ejeAgrupado;
+    if (!cfg || !cfg.grupos || !cfg.grupos.length) return;
+    const ctx = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    const area = chart.chartArea;
+    const xAt = i => meta.data[i].x;
+    const filaY = chart.scales.x.bottom + (cfg.conFilaPrimaria ? 18 : 8);
+    ctx.save();
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.fillStyle = css('--text-secondary');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = css('--text-muted');
+    ctx.lineWidth = 1;
+    cfg.grupos.forEach(function(g, gi) {
+      const xIni = g.desde === 0 ? area.left : (xAt(g.desde - 1) + xAt(g.desde)) / 2;
+      const xFin = g.hasta === meta.data.length - 1 ? area.right : (xAt(g.hasta) + xAt(g.hasta + 1)) / 2;
+      ctx.fillText(g.etiqueta, (xIni + xFin) / 2, filaY);
+      if (gi > 0) {
+        ctx.beginPath();
+        ctx.moveTo(xIni, area.bottom);
+        ctx.lineTo(xIni, filaY + 8);
+        ctx.stroke();
+      }
+    });
+    ctx.restore();
+  }
+};
+Chart.register(textoCentro, etiquetaTotalBarra, etiquetaValorBarra, ejeAgrupado);
 
 function baseOpts() {
   Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -389,7 +425,8 @@ function baseOpts() {
       },
       textoCentro: false,
       etiquetaTotalBarra: false,
-      etiquetaValorBarra: false
+      etiquetaValorBarra: false,
+      ejeAgrupado: false
     }
   };
 }
@@ -527,36 +564,81 @@ function lunesDeSemana(fechaIso) {
   return d.toISOString().slice(0, 10);
 }
 
+// Número de semana ISO-8601 (semana que contiene el primer jueves del año) del lunes dado.
+function semanaIso_(lunesIso) {
+  const d = new Date(lunesIso + 'T00:00:00');
+  d.setDate(d.getDate() + 3); // jueves de esa semana
+  const inicioAno = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - inicioAno) / 86400000 + 1) / 7);
+}
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+function nombreMes_(yyyyMM) {
+  const nombre = MESES[Number(yyyyMM.slice(5, 7)) - 1];
+  return nombre.charAt(0).toUpperCase() + nombre.slice(1);
+}
+
 // Re-agrupa los buckets diarios que manda el backend a semana o mes (sin volver a pedir
-// datos al servidor); 'dia' se devuelve tal cual.
+// datos al servidor). Cada punto trae `etiqueta` (fecha/rango completo, para "Ver tabla"),
+// `tick` (etiqueta corta del eje X — número de día, "Wnn" de semana, u oculta en mes) y
+// `mesKey` ('yyyy-MM', para agrupar visualmente por mes en graficaFecha/ejeAgrupado).
 function agregarFecha(diarios, gran) {
-  if (gran === 'dia') return diarios.map(d => ({ etiqueta: d.fecha, total: d.total }));
+  if (gran === 'dia') {
+    return diarios.map(d => ({
+      etiqueta: d.fecha, tick: String(Number(d.fecha.slice(8, 10))),
+      mesKey: d.fecha.slice(0, 7), total: d.total
+    }));
+  }
   const por = {};
   diarios.forEach(function(d) {
     const clave = gran === 'semana' ? lunesDeSemana(d.fecha) : d.fecha.slice(0, 7);
     por[clave] = (por[clave] || 0) + d.total;
   });
   return Object.keys(por).sort().map(function(k) {
-    return { etiqueta: gran === 'semana' ? 'Sem. del ' + k : k, total: por[k] };
+    if (gran === 'semana') {
+      return { etiqueta: 'Sem. del ' + k, tick: 'W' + semanaIso_(k), mesKey: k.slice(0, 7), total: por[k] };
+    }
+    return { etiqueta: nombreMes_(k) + ' ' + k.slice(0, 4), tick: '', mesKey: k, total: por[k] };
   });
+}
+
+// Tramos contiguos de mesKey dentro de la serie (ya viene ordenada por fecha, así que un
+// mismo mes siempre es un rango [desde, hasta] de índices sin huecos) — para la fila de
+// mes que dibuja el plugin ejeAgrupado debajo del eje X.
+function gruposPorMes(serie) {
+  const grupos = [];
+  serie.forEach(function(s, i) {
+    const actual = grupos[grupos.length - 1];
+    if (actual && actual.mesKey === s.mesKey) actual.hasta = i;
+    else grupos.push({ mesKey: s.mesKey, etiqueta: nombreMes_(s.mesKey), desde: i, hasta: i });
+  });
+  return grupos;
 }
 
 function graficaFecha() {
   destruir('fecha');
   const serie = agregarFecha(datosFechaDiaria, granFecha);
+  const conFilaPrimaria = granFecha !== 'mes'; // en mes cada barra ya es un mes: una sola fila
   const opts = baseOpts();
   opts.plugins.etiquetaValorBarra = true;
+  opts.plugins.ejeAgrupado = { grupos: gruposPorMes(serie), conFilaPrimaria: conFilaPrimaria };
+  opts.layout = { padding: { bottom: conFilaPrimaria ? 30 : 18 } };
   opts.scales = {
     x: { grid: { display: false }, border: { color: css('--baseline') },
-         ticks: { maxRotation: 45, autoSkip: true } },
+         ticks: { display: conFilaPrimaria, maxRotation: 0, minRotation: 0, autoSkip: false,
+                  font: { size: granFecha === 'dia' ? 10 : 11 } } },
     y: { grid: { color: css('--grid'), lineWidth: 1 }, border: { display: false },
          beginAtZero: true, grace: '18%', ticks: { precision: 0 } }
   };
-  opts.plugins.tooltip.callbacks = { label: c => ' ' + c.parsed.y + ' folios en backlog' };
+  opts.plugins.tooltip.callbacks = {
+    title: c => c.length ? serie[c[0].dataIndex].etiqueta : '',
+    label: c => ' ' + c.parsed.y + ' folios en backlog'
+  };
   charts.fecha = new Chart(document.getElementById('ch-fecha'), {
     type: 'bar',
     data: {
-      labels: serie.map(s => s.etiqueta),
+      labels: serie.map(s => s.tick),
       datasets: [{
         label: 'Backlog',
         data: serie.map(s => s.total),

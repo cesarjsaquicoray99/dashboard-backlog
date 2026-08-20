@@ -83,7 +83,13 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   actual de cada folio) — es la distribución de folios *que siguen en backlog hoy* según
   cuándo se atascaron. El backend (`porFecha_`) manda solo el detalle diario; el frontend
   re-agrupa a semana (lunes ISO) o mes sin volver a pedir datos al servidor, mismo patrón
-  de buckets diarios + toggle que ya usa `KPI_Dashboard`.
+  de buckets diarios + toggle que ya usa `KPI_Dashboard`. **Eje X agrupado por mes** (20 ago
+  2026, plugin casero `ejeAgrupado` en `Index.html`): en Día el eje muestra el número de día
+  y en Semana el número de semana ISO ("Wnn"), con una fila debajo con el nombre del mes y
+  una línea separadora en cada cambio de mes; en Mes cada barra ya es un mes, así que se
+  oculta la fila de ticks primaria y solo queda esa fila (nombre del mes + separador entre
+  cada una). La agrupación asume que `porFecha_`/`agregarFecha` vienen ordenados por fecha
+  (tramos de mes contiguos, sin huecos) — si eso cambia, `gruposPorMes` deja de servir.
 - **Backlog por cliente** / **Backlog por proveedor**: tablas ordenables (clic en encabezado),
   mismo desglose de aging que la etapa (`porCliente_`/`porProveedor_` en `Code.gs`).
 - **Backlog por evento**: tabla ordenable por el código crudo de 4 caracteres (sin pasar por
