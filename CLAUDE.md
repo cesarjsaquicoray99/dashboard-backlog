@@ -62,9 +62,10 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
     y decidir si hay que ampliar `ETAPAS`.
 - **Antigüedad (aging)** = días de calendario entre `Último evento: Fecha` y hoy (mide qué
   tan "frío" está el folio, no la antigüedad total del pedido desde su creación).
-  Buckets (ampliados a 4 el 20 ago 2026, ver `AGING_BUCKETS` en `Code.gs`): **0 días** ·
-  **1–2 días** · **3–5 días** (atención) · **6+ días** (crítico). "0" y "1–2" comparten el
-  verde de la paleta (ambos "sin urgencia"); no se definió un color aparte para "0 días".
+  Buckets (ampliados a 4 el 20 ago 2026, ver `AGING_BUCKETS` en `Code.gs`): **0 días**
+  (azul info, `--brand-blue`) · **1–2 días** (verde) · **3–5 días** (ámbar, atención) ·
+  **6+ días** (rojo, crítico). "0 días" arrancó compartiendo el verde con "1–2 días" pero
+  no se distinguían en la leyenda/gráficas — se cambió a azul info el mismo 20 ago 2026.
 - **Filtros**: Empresa (multiselección), Tipo de envío, Proveedor, Don Veloz (ambos sobre
   `Último evento: Proveedor`/`Nombre Don Veloz`, es decir quién tiene el folio *ahora*, no
   quién lo tuvo en un evento anterior), **No intentados** (agregado 20 ago 2026: folios sin

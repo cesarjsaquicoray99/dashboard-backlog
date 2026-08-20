@@ -150,6 +150,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .tabla-scroll { overflow-x: auto; }
 .chip { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
 .chip.good { background: rgba(133,196,64,.16); color: var(--status-good); }
+.chip.info { background: rgba(25,118,210,.16); color: var(--brand-blue); }
 .chip.warning { background: rgba(255,160,0,.16); color: var(--status-warning); }
 .chip.critical { background: rgba(229,57,53,.16); color: var(--status-critical); }
 .chip.muted { background: rgba(148,163,184,.20); color: var(--status-muted); }
@@ -294,7 +295,7 @@ let charts = {};
 // Espejo de AGING_BUCKETS (Code.gs) solo para render — mismas 4 categorías y colores,
 // para no repetirlas sueltas en cada tabla/gráfica que las usa.
 const BUCKETS_AGING = [
-  { clave: 'hoy',      etiqueta: '0 días',   color: 'good' },
+  { clave: 'hoy',      etiqueta: '0 días',   color: 'info' },
   { clave: 'reciente', etiqueta: '1–2 días', color: 'good' },
   { clave: 'atencion', etiqueta: '3–5 días', color: 'warning' },
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical' }
@@ -415,6 +416,7 @@ function colorEstado(clave) {
   return clave === 'good' ? css('--status-good')
     : clave === 'warning' ? css('--status-warning')
     : clave === 'critical' ? css('--status-critical')
+    : clave === 'info' ? css('--brand-blue')
     : css('--status-muted');
 }
 

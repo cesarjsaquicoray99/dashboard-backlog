@@ -25,9 +25,10 @@ const EVENTOS_TERMINALES = ['4002', '5002', '8002', '8003', '8004'];
 
 // Buckets de aging (antigüedad = días sin avance desde "Último evento: Fecha",
 // decisión del usuario, ampliados a 4 el 20 ago 2026). Los colores mapean a la paleta
-// de marca (ver Index.html) — "hoy" y "reciente" comparten el verde, son ambos "sin urgencia".
+// de marca (ver Index.html) — "hoy" usa el azul info (neutro, recién pasó) para
+// distinguirse de "reciente" (verde); antes compartían el verde y no se distinguían.
 const AGING_BUCKETS = [
-  { clave: 'hoy',      etiqueta: '0 días',   color: 'good',     max: 0 },
+  { clave: 'hoy',      etiqueta: '0 días',   color: 'info',     max: 0 },
   { clave: 'reciente', etiqueta: '1–2 días', color: 'good',     max: 2 },
   { clave: 'atencion', etiqueta: '3–5 días', color: 'warning',  max: 5 },
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical', max: Infinity }
