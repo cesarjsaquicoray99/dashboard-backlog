@@ -4,13 +4,37 @@ Dashboard de una sola vista para monitorear el **backlog** (pedidos sin evento t
 la operación: en qué etapa está atascado cada folio y cuántos días lleva sin avanzar.
 
 ## Archivos y flujo de trabajo
-- `Code.gs` — backend: lee el gsheet "Backlog - PE", agrega por etapa/antigüedad y expone
-  `getBacklogData(params)` vía `google.script.run`.
+- `Code.js` — backend: lee el gsheet "Backlog - PE", agrega por etapa/antigüedad y expone
+  `getBacklogData(params)` vía `google.script.run`. Se llama `Code.js` en local (no
+  `Code.gs`) por convención de `clasp` — en el editor de Apps Script se sigue viendo como
+  `Code.gs`.
 - `Index.html` — frontend completo (CSS + JS inline, Chart.js 4.4.0 por CDN).
-- **Deploy**: copiar ambos archivos al editor de Apps Script y crear **"Nueva versión"
-  del deployment** para ver cambios. Recordárselo al usuario en cada entrega.
+- **Deploy**: `clasp push` sube los archivos al editor, pero **no** actualiza el Web App en
+  producción — para eso hace falta `clasp deploy` (o crear manualmente "Nueva versión" del
+  deployment desde el editor). Recordárselo al usuario en cada entrega.
 - El usuario edita los archivos por su cuenta entre sesiones: **verificar el contenido
   actual (Grep/Read) antes de cada Edit**, no asumir que está como se dejó.
+
+## Control de versiones (conectado 20 ago 2026)
+- **Repo local**: `git init` en esta carpeta, rama `main`.
+- **GitHub**: [github.com/cesarjsaquicoray99/dashboard-backlog](https://github.com/cesarjsaquicoray99/dashboard-backlog)
+  (remoto `origin`), sincronizado.
+- **Apps Script ↔ local**: vinculado vía `clasp` (`npm install -g @google/clasp`,
+  `clasp login` con la cuenta `cesar.saquicoray@99minutos.com`). Script ID en `.clasp.json`
+  (gitignoreado, no sube a GitHub — no es secreto grave pero no aporta al repo compartido).
+- **`.gitignore`**: excluye `.clasp.json`, `.clasprc.json`, `node_modules/`.
+- **Verificado en la conexión inicial**: el código del editor de Apps Script era idéntico
+  byte a byte al local antes de vincular (sin pérdida de cambios); se probó un
+  push/pull/revert de ida y vuelta confirmando que los acentos/UTF-8 no se corrompen.
+- **Flujo de trabajo con esta conexión**:
+  ```
+  editar Code.js / Index.html
+  clasp push        → sube al editor de Apps Script
+  clasp deploy       → nueva versión del deployment (o manual desde el editor)
+  git add -A; git commit -m "..."; git push   → versiona en GitHub
+  ```
+- Pendiente si se quiere automatizar más: alias/script que encadene push + commit + push,
+  o GitHub Actions con credenciales de clasp como secret (no configurado aún).
 
 ## Fuente de datos
 - Spreadsheet **"Backlog - PE"** (`1yt-vTk6oZWbX0uHbqhUOu9DahmaBgikArUz_QUIwx8Y`), hoja **`BD`**.
