@@ -60,19 +60,21 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
     y decidir si hay que ampliar `ETAPAS`.
 - **Antigüedad (aging)** = días de calendario entre `Último evento: Fecha` y hoy (mide qué
   tan "frío" está el folio, no la antigüedad total del pedido desde su creación).
-  Buckets: **0–2 días** (reciente) · **3–5 días** (atención) · **6+ días** (crítico).
-  Estos rangos son una propuesta inicial mía, no una regla de negocio confirmada — **validar
-  con el usuario** si necesita otro corte.
+  Buckets (ampliados a 4 el 20 ago 2026, ver `AGING_BUCKETS` en `Code.gs`): **0 días** ·
+  **1–2 días** · **3–5 días** (atención) · **6+ días** (crítico). "0" y "1–2" comparten el
+  verde de la paleta (ambos "sin urgencia"); no se definió un color aparte para "0 días".
 - **Filtros**: Empresa (multiselección), Tipo de envío, Proveedor, Don Veloz (ambos sobre
   `Último evento: Proveedor`/`Nombre Don Veloz`, es decir quién tiene el folio *ahora*, no
-  quién lo tuvo en un evento anterior), y rango de `ETA Cliente: Fecha` (opcional — a
-  diferencia de `monitoreo_entregas`, folios sin ETA **no se excluyen** salvo que el filtro
-  de fecha esté activo).
+  quién lo tuvo en un evento anterior), **No intentados** (agregado 20 ago 2026: folios sin
+  fecha de 1er evento en `Entrega fallida` NI en `Entrega confirmada` — checkbox, no
+  multiselect), y rango de `ETA Cliente: Fecha` (opcional — a diferencia de
+  `monitoreo_entregas`, folios sin ETA **no se excluyen** salvo que el filtro de fecha esté
+  activo).
 
 ## Vistas del dashboard
 - KPI tiles + dona de antigüedad (headline: total, % crítico, promedio de días, sin clasificar).
 - **Backlog por etapa**: barra apilada (etapa × aging), con tabla accesible ("Ver tabla").
-- **Evolución del backlog**: línea de folios en backlog agrupados por la fecha de su
+- **Evolución del backlog**: barras (con data labels) de folios en backlog agrupados por la fecha de su
   `Último evento: Fecha`, con toggle Día/Semana/Mes. **Importante**: esto NO es una serie
   histórica del tamaño del backlog día a día (no hay snapshots del pasado, solo el estado
   actual de cada folio) — es la distribución de folios *que siguen en backlog hoy* según
@@ -128,13 +130,16 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   eje, tenerlo presente).
 
 ## Pendientes latentes
-- **Validar buckets de aging** (0–2 / 3–5 / 6+ días) con el usuario — son una propuesta,
-  no una definición confirmada.
+- Buckets de aging (0 / 1–2 / 3–5 / 6+ días) confirmados por el usuario el 20 ago 2026 —
+  ya no es una propuesta pendiente de validar.
+- Verificado contra la hoja real (`BD` del spreadsheet "Backlog - PE") el 20 ago 2026: el
+  usuario compartió una captura del dashboard corriendo con datos reales (504 folios en
+  backlog de 74058 en la hoja, "Sin clasificar": 0) — los nombres de columna en `HEADERS`
+  matchean. Si se agregan columnas nuevas (como se hizo con "Entrega fallida"/"Entrega
+  confirmada" para el filtro "No intentados"), seguir confirmando con
+  `debugColumnas()`/`testConnection()`.
 - **Ejecutar `debugEventos()`** contra datos reales para confirmar que `ETAPAS` cubre todos
   los códigos no terminales que aparecen en la hoja; ampliar el mapeo si "Sin clasificar"
-  sale alto.
+  sale alto (aunque en la captura del 20 ago salió en 0).
 - El filtro "Don Veloz" es un `<select>` simple; si la lista de veloces crece mucho, migrar
   a un multiselect con buscador (como el de Empresa).
-- No se ha podido verificar contra la hoja real (`BD` del spreadsheet "Backlog - PE") — los
-  nombres de columna en `HEADERS` están tomados literalmente de la lista que pasó el usuario;
-  confirmar con `debugColumnas()`/`testConnection()` en la primera corrida real.

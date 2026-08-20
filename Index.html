@@ -54,10 +54,13 @@ h1 { font-size: 18px; font-weight: 600; }
   border-radius: 10px; padding: 12px 14px; margin: 16px 0;
 }
 .filtro label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
-.filtro select, .filtro input {
+.filtro select, .filtro input:not([type="checkbox"]) {
   font: inherit; color: var(--text-primary); background: var(--page);
   border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 130px;
 }
+.filtro-check { display: flex; align-items: center; gap: 6px; padding-bottom: 7px; }
+.filtro-check label { margin: 0; font-size: 12.5px; color: var(--text-primary); cursor: pointer; }
+.filtro-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--brand-navy); cursor: pointer; }
 .filtro button {
   font: inherit; font-weight: 600; color: #fff; background: var(--brand-navy);
   border: none; border-radius: 6px; padding: 7px 16px; cursor: pointer;
@@ -65,11 +68,14 @@ h1 { font-size: 18px; font-weight: 600; }
 .filtro button:hover { opacity: .9; }
 
 .grid-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-.inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: stretch; }
-.inicio-grid .grid-kpis { grid-template-columns: repeat(2, 1fr); }
+.inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start; }
+.inicio-grid .grid-kpis { grid-template-columns: repeat(4, 1fr); }
 .inicio-grid .tile { display: flex; flex-direction: column; justify-content: center; }
-.plot.dona { height: 240px; }
-@media (max-width: 820px) { .inicio-grid { grid-template-columns: 1fr; } }
+.plot.dona { height: 160px; }
+@media (max-width: 820px) {
+  .inicio-grid { grid-template-columns: 1fr; }
+  .inicio-grid .grid-kpis { grid-template-columns: repeat(2, 1fr); }
+}
 .tile {
   background: var(--surface-1); border: 1px solid var(--border);
   border-radius: 10px; padding: 12px 14px;
@@ -197,6 +203,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   <div class="filtro"><label>Tipo de envío</label><select id="f-tipo"><option value="">Todos</option></select></div>
   <div class="filtro"><label>Proveedor</label><select id="f-proveedor"><option value="">Todos</option></select></div>
   <div class="filtro"><label>Don Veloz</label><select id="f-donveloz"><option value="">Todos</option></select></div>
+  <div class="filtro filtro-check">
+    <input type="checkbox" id="f-no-intentado">
+    <label for="f-no-intentado" title="Sin fecha de 1er evento de entrega fallida ni de entrega confirmada">No intentados</label>
+  </div>
   <div class="filtro"><label>ETA desde</label><input type="date" id="f-eta-desde"></div>
   <div class="filtro"><label>ETA hasta</label><input type="date" id="f-eta-hasta"></div>
   <div class="filtro"><button id="btn-aplicar">Aplicar</button></div>
@@ -223,12 +233,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="nota">Folios en backlog por etapa, desglosados por antigüedad. El número al final de cada barra es el total de la etapa.</div>
       <div class="plot-scroll"><div class="plot" id="plot-etapa"><canvas id="ch-etapa"></canvas></div></div>
       <div class="tabla-scroll oculto" id="t-etapa"></div>
-      <div class="leyenda">
-        <span><span class="punto" style="background:var(--status-good)"></span>0–2 días</span>
-        <span><span class="punto" style="background:var(--status-warning)"></span>3–5 días</span>
-        <span><span class="punto" style="background:var(--status-critical)"></span>6+ días</span>
-        <span id="leyenda-sin-aging" class="oculto"><span class="punto" style="background:var(--status-muted)"></span>Sin fecha de evento</span>
-      </div>
+      <div class="leyenda" id="leyenda-etapa"></div>
     </div>
   </div>
 
@@ -286,10 +291,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 let charts = {};
 
-function hexARgba(hex, alfa) {
-  const n = parseInt(hex.slice(1), 16);
-  return 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + alfa + ')';
-}
+// Espejo de AGING_BUCKETS (Code.gs) solo para render — mismas 4 categorías y colores,
+// para no repetirlas sueltas en cada tabla/gráfica que las usa.
+const BUCKETS_AGING = [
+  { clave: 'hoy',      etiqueta: '0 días',   color: 'good' },
+  { clave: 'reciente', etiqueta: '1–2 días', color: 'good' },
+  { clave: 'atencion', etiqueta: '3–5 días', color: 'warning' },
+  { clave: 'critico',  etiqueta: '6+ días',  color: 'critical' }
+];
 
 const textoCentro = {
   id: 'textoCentro',
@@ -340,7 +349,27 @@ const etiquetaTotalBarra = {
     ctx.restore();
   }
 };
-Chart.register(textoCentro, etiquetaTotalBarra);
+// Data label simple encima de cada barra, para charts de una sola serie (no apilada).
+const etiquetaValorBarra = {
+  id: 'etiquetaValorBarra',
+  afterDatasetsDraw(chart) {
+    if (!chart.options.plugins.etiquetaValorBarra) return;
+    const ctx = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    const data = chart.data.datasets[0].data;
+    ctx.save();
+    ctx.font = '600 10px system-ui, sans-serif';
+    ctx.fillStyle = css('--text-secondary');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    meta.data.forEach(function(el, i) {
+      if (!data[i]) return;
+      ctx.fillText(String(data[i]), el.x, el.y - 4);
+    });
+    ctx.restore();
+  }
+};
+Chart.register(textoCentro, etiquetaTotalBarra, etiquetaValorBarra);
 
 function baseOpts() {
   Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -358,7 +387,8 @@ function baseOpts() {
         boxWidth: 8, boxHeight: 8, boxPadding: 4, usePointStyle: true
       },
       textoCentro: false,
-      etiquetaTotalBarra: false
+      etiquetaTotalBarra: false,
+      etiquetaValorBarra: false
     }
   };
 }
@@ -429,8 +459,12 @@ function graficaDona(porAging, total) {
 
 function graficaEtapa(porEtapa) {
   destruir('etapa');
-  document.getElementById('leyenda-sin-aging').classList.toggle('oculto',
-    !porEtapa.some(e => e.sinAging > 0));
+  const conSinAging = porEtapa.some(e => e.sinAging > 0);
+  document.getElementById('leyenda-etapa').innerHTML =
+    BUCKETS_AGING.map(b => '<span><span class="punto" style="background:' + colorEstado(b.color) +
+      '"></span>' + b.etiqueta + '</span>').join('') +
+    (conSinAging ? '<span><span class="punto" style="background:' + css('--status-muted') +
+      '"></span>Sin fecha de evento</span>' : '');
   const plot = document.getElementById('plot-etapa');
   plot.style.height = Math.max(220, porEtapa.length * 48 + 40) + 'px';
   const opts = baseOpts();
@@ -445,15 +479,11 @@ function graficaEtapa(porEtapa) {
   opts.plugins.tooltip.callbacks = {
     footer: c => c.length ? porEtapa[c[0].dataIndex].total + ' folios en total' : ''
   };
-  const datasets = [
-    { label: '0–2 días', data: porEtapa.map(e => e.reciente),
-      backgroundColor: css('--status-good'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' },
-    { label: '3–5 días', data: porEtapa.map(e => e.atencion),
-      backgroundColor: css('--status-warning'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' },
-    { label: '6+ días', data: porEtapa.map(e => e.critico),
-      backgroundColor: css('--status-critical'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' }
-  ];
-  if (porEtapa.some(e => e.sinAging > 0)) {
+  const datasets = BUCKETS_AGING.map(function(b) {
+    return { label: b.etiqueta, data: porEtapa.map(e => e[b.clave]),
+      backgroundColor: colorEstado(b.color), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' };
+  });
+  if (conSinAging) {
     datasets.push({ label: 'Sin fecha de evento', data: porEtapa.map(e => e.sinAging),
       backgroundColor: css('--status-muted'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' });
   }
@@ -471,14 +501,12 @@ let filtroEvento = null; // { codigo, etapa } | null — seteado al clickear una
 function pintarTablaEtapa(porEtapa) {
   const activo = filtroEtapa ? filtroEtapa.clave : null;
   const conSinAging = porEtapa.some(e => e.sinAging > 0);
-  const cabeceras = ['Etapa', '0–2 días', '3–5 días', '6+ días'].concat(conSinAging ? ['Sin fecha'] : []).concat(['Total']);
+  const cabeceras = ['Etapa'].concat(BUCKETS_AGING.map(b => b.etiqueta)).concat(conSinAging ? ['Sin fecha'] : []).concat(['Total']);
   document.getElementById('t-etapa').innerHTML =
     '<table><thead><tr>' + cabeceras.map((c, i) => '<th class="' + (i ? 'num' : '') + '">' + c + '</th>').join('') + '</tr></thead><tbody>' +
     porEtapa.map(e => '<tr class="fila-filtrable' + (activo === e.etapa ? ' activa' : '') + '" data-valor="' + esc(e.etapa) + '">' +
       '<td>' + e.etiqueta + '</td>' +
-      '<td class="num">' + e.reciente + '</td>' +
-      '<td class="num">' + e.atencion + '</td>' +
-      '<td class="num">' + e.critico + '</td>' +
+      BUCKETS_AGING.map(b => '<td class="num">' + e[b.clave] + '</td>').join('') +
       (conSinAging ? '<td class="num">' + e.sinAging + '</td>' : '') +
       '<td class="num"><strong>' + e.total + '</strong></td>' +
       '</tr>').join('') +
@@ -515,26 +543,22 @@ function graficaFecha() {
   destruir('fecha');
   const serie = agregarFecha(datosFechaDiaria, granFecha);
   const opts = baseOpts();
+  opts.plugins.etiquetaValorBarra = true;
   opts.scales = {
     x: { grid: { display: false }, border: { color: css('--baseline') },
          ticks: { maxRotation: 45, autoSkip: true } },
     y: { grid: { color: css('--grid'), lineWidth: 1 }, border: { display: false },
-         beginAtZero: true, grace: '10%', ticks: { precision: 0 } }
+         beginAtZero: true, grace: '18%', ticks: { precision: 0 } }
   };
   opts.plugins.tooltip.callbacks = { label: c => ' ' + c.parsed.y + ' folios en backlog' };
   charts.fecha = new Chart(document.getElementById('ch-fecha'), {
-    type: 'line',
+    type: 'bar',
     data: {
       labels: serie.map(s => s.etiqueta),
       datasets: [{
         label: 'Backlog',
         data: serie.map(s => s.total),
-        borderColor: css('--brand-blue'), borderWidth: 2,
-        backgroundColor: hexARgba(css('--brand-blue'), 0.12), fill: true,
-        pointRadius: serie.length > 40 ? 0 : 3, pointHoverRadius: 5,
-        pointBackgroundColor: css('--brand-blue'),
-        pointBorderColor: css('--surface-1'), pointBorderWidth: 2,
-        tension: 0.2
+        backgroundColor: css('--brand-blue'), maxBarThickness: 28, borderRadius: 3
       }]
     },
     options: opts
@@ -570,10 +594,8 @@ let datosDetalle = [];
 let sortDetalle = { key: 'dias', dir: -1 };
 
 function claveAgingChip(etiquetaAging) {
-  if (etiquetaAging.indexOf('0–2') === 0) return 'good';
-  if (etiquetaAging.indexOf('3–5') === 0) return 'warning';
-  if (etiquetaAging.indexOf('6+') === 0) return 'critical';
-  return 'muted';
+  const b = BUCKETS_AGING.find(b => etiquetaAging.indexOf(b.etiqueta) === 0);
+  return b ? b.color : 'muted';
 }
 
 function ordenar(lista, s) {
@@ -618,7 +640,7 @@ function pintarDetalle() {
 }
 
 // ── Tablas agrupadas con desglose de aging (proveedor / cliente / evento) ──
-// Misma forma de datos ({ reciente, atencion, critico, sinAging, total, ...clave(s) });
+// Misma forma de datos ({ ...claves de BUCKETS_AGING, sinAging, total, ...clave(s) });
 // una sola función de render parametrizada por la(s) columna(s) identificadoras.
 let datosProveedor = [], sortProveedor = { key: 'total', dir: -1 };
 let datosCliente = [], sortCliente = { key: 'total', dir: -1 };
@@ -630,9 +652,8 @@ function esc(s) { return String(s).replace(/"/g, '&quot;'); }
 // mismo, si hay alguno — solo para resaltar la fila correspondiente.
 function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
   const conSinAging = datos.some(d => d.sinAging > 0);
-  const cols = colsIdentidad.concat([
-    ['reciente', '0–2 días', true], ['atencion', '3–5 días', true], ['critico', '6+ días', true]
-  ]).concat(conSinAging ? [['sinAging', 'Sin fecha', true]] : [])
+  const cols = colsIdentidad.concat(BUCKETS_AGING.map(b => [b.clave, b.etiqueta, true]))
+    .concat(conSinAging ? [['sinAging', 'Sin fecha', true]] : [])
     .concat([['total', 'Total', true]]);
   const lista = ordenar(datos, s);
   const claveFiltro = colsIdentidad[0][0];
@@ -641,9 +662,7 @@ function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activo) {
     lista.map(d => '<tr class="fila-filtrable' + (activo != null && activo === d[claveFiltro] ? ' activa' : '') +
       '" data-valor="' + esc(d[claveFiltro]) + '">' +
       colsIdentidad.map(c => '<td>' + d[c[0]] + '</td>').join('') +
-      '<td class="num">' + d.reciente + '</td>' +
-      '<td class="num">' + d.atencion + '</td>' +
-      '<td class="num">' + d.critico + '</td>' +
+      BUCKETS_AGING.map(b => '<td class="num">' + d[b.clave] + '</td>').join('') +
       (conSinAging ? '<td class="num">' + d.sinAging + '</td>' : '') +
       '<td class="num"><strong>' + d.total + '</strong></td>' +
       '</tr>').join('') +
@@ -781,6 +800,7 @@ function cargar() {
     tipoEnvio: document.getElementById('f-tipo').value || null,
     proveedor: document.getElementById('f-proveedor').value || null,
     donVeloz: document.getElementById('f-donveloz').value || null,
+    noIntentado: document.getElementById('f-no-intentado').checked || null,
     etaDesde: document.getElementById('f-eta-desde').value || null,
     etaHasta: document.getElementById('f-eta-hasta').value || null,
     etapa: filtroEtapa ? filtroEtapa.clave : null,
@@ -845,6 +865,7 @@ function chipsActivos() {
   if (prov) chips.push({ tipo: 'proveedor', etiqueta: 'Proveedor: ' + prov });
   const dv = document.getElementById('f-donveloz').value;
   if (dv) chips.push({ tipo: 'donveloz', etiqueta: 'Don Veloz: ' + dv });
+  if (document.getElementById('f-no-intentado').checked) chips.push({ tipo: 'noIntentado', etiqueta: 'No intentados' });
   const ed = document.getElementById('f-eta-desde').value, eh = document.getElementById('f-eta-hasta').value;
   if (ed || eh) chips.push({ tipo: 'eta', etiqueta: 'ETA: ' + (ed || '…') + ' – ' + (eh || '…') });
   if (filtroEtapa) chips.push({ tipo: 'etapa', etiqueta: 'Etapa: ' + filtroEtapa.etiqueta });
@@ -867,6 +888,7 @@ function quitarFiltro(tipo) {
   else if (tipo === 'tipo') document.getElementById('f-tipo').value = '';
   else if (tipo === 'proveedor') document.getElementById('f-proveedor').value = '';
   else if (tipo === 'donveloz') document.getElementById('f-donveloz').value = '';
+  else if (tipo === 'noIntentado') document.getElementById('f-no-intentado').checked = false;
   else if (tipo === 'eta') { document.getElementById('f-eta-desde').value = ''; document.getElementById('f-eta-hasta').value = ''; }
   else if (tipo === 'etapa') filtroEtapa = null;
   else if (tipo === 'evento') filtroEvento = null;
@@ -880,6 +902,7 @@ function limpiarFiltros() {
   document.getElementById('f-tipo').value = '';
   document.getElementById('f-proveedor').value = '';
   document.getElementById('f-donveloz').value = '';
+  document.getElementById('f-no-intentado').checked = false;
   document.getElementById('f-eta-desde').value = '';
   document.getElementById('f-eta-hasta').value = '';
   filtroEtapa = null;

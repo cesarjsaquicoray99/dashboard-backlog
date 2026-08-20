@@ -22,9 +22,11 @@ const ETAPAS = [
 const EVENTOS_TERMINALES = ['4002', '5002', '8002', '8003', '8004'];
 
 // Buckets de aging (antigüedad = días sin avance desde "Último evento: Fecha",
-// decisión del usuario). Los colores mapean a la paleta de marca (ver Index.html).
+// decisión del usuario, ampliados a 4 el 20 ago 2026). Los colores mapean a la paleta
+// de marca (ver Index.html) — "hoy" y "reciente" comparten el verde, son ambos "sin urgencia".
 const AGING_BUCKETS = [
-  { clave: 'reciente', etiqueta: '0–2 días', color: 'good',     max: 2 },
+  { clave: 'hoy',      etiqueta: '0 días',   color: 'good',     max: 0 },
+  { clave: 'reciente', etiqueta: '1–2 días', color: 'good',     max: 2 },
   { clave: 'atencion', etiqueta: '3–5 días', color: 'warning',  max: 5 },
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical', max: Infinity }
 ];
@@ -40,7 +42,9 @@ const HEADERS = {
   ultimoEventoFecha: ['Último evento: Fecha'],
   ultimoEvento:      ['Último evento: Evento'],
   donVeloz:          ['Último evento: Nombre Don Veloz'],
-  proveedor:         ['Último evento: Proveedor']
+  proveedor:         ['Último evento: Proveedor'],
+  entregaFallidaFecha:    ['Entrega fallida: Fecha (1er evento)'],
+  entregaConfirmadaFecha: ['Entrega confirmada: Fecha (1er evento)']
 };
 
 function doGet() {
@@ -126,6 +130,15 @@ function bucketAging_(dias) {
   return AGING_BUCKETS[AGING_BUCKETS.length - 1];
 }
 
+// Objeto acumulador con una clave en 0 por cada bucket de AGING_BUCKETS (más sinAging/total),
+// usado por porEtapa_/porProveedor_/porCliente_/porEvento_ para no repetir la lista de
+// claves a mano en cada uno.
+function nuevoAcumuladorAging_(extra) {
+  const o = Object.assign({}, extra, { sinAging: 0, total: 0 });
+  AGING_BUCKETS.forEach(function(b) { o[b.clave] = 0; });
+  return o;
+}
+
 // Días completos entre dos fechas, comparando solo la parte de calendario (ignora la hora).
 function diasEntre_(fecha, hoy) {
   const a = new Date(fecha.getFullYear(), fecha.getMonth(), fecha.getDate());
@@ -149,7 +162,11 @@ function leerFolios_() {
       ultimoEventoFecha: comoFecha_(fila[cols.ultimoEventoFecha]),
       ultimoEvento: primeros4_(fila[cols.ultimoEvento]),
       donVeloz: String(fila[cols.donVeloz] || ''),
-      proveedor: String(fila[cols.proveedor] || '')
+      proveedor: String(fila[cols.proveedor] || ''),
+      // "No intentados" (decisión del usuario, 20 ago 2026): ni la entrega fallida ni la
+      // confirmada tienen fecha de primer evento — al folio no se le intentó entregar aún.
+      noIntentado: comoFecha_(fila[cols.entregaFallidaFecha]) == null &&
+        comoFecha_(fila[cols.entregaConfirmadaFecha]) == null
     });
   }
   return folios;
@@ -179,15 +196,15 @@ function calcularKpis_(folios) {
   };
 }
 
-// Backlog agrupado por etapa, cada uno con su desglose de aging (reciente/atención/crítico).
+// Backlog agrupado por etapa, cada uno con su desglose de aging (ver AGING_BUCKETS).
 // Incluye SIEMPRE las 5 etapas conocidas (aunque estén en 0) para que el orden no salte
 // entre recargas; "Otro" solo aparece si hay folios sin clasificar.
 function porEtapa_(folios) {
   const por = {};
   ETAPAS.forEach(function(e) {
-    por[e.clave] = { etapa: e.clave, etiqueta: e.etiqueta, reciente: 0, atencion: 0, critico: 0, sinAging: 0, total: 0 };
+    por[e.clave] = nuevoAcumuladorAging_({ etapa: e.clave, etiqueta: e.etiqueta });
   });
-  por.otro = { etapa: 'otro', etiqueta: 'Otro / sin clasificar', reciente: 0, atencion: 0, critico: 0, sinAging: 0, total: 0 };
+  por.otro = nuevoAcumuladorAging_({ etapa: 'otro', etiqueta: 'Otro / sin clasificar' });
 
   folios.forEach(function(f) {
     const b = por[f.etapa.clave];
@@ -208,7 +225,7 @@ function porProveedor_(folios) {
   const por = {};
   folios.forEach(function(f) {
     const clave = f.proveedor || 'Sin proveedor asignado';
-    if (!por[clave]) por[clave] = { proveedor: clave, reciente: 0, atencion: 0, critico: 0, sinAging: 0, total: 0 };
+    if (!por[clave]) por[clave] = nuevoAcumuladorAging_({ proveedor: clave });
     const b = por[clave];
     b.total++;
     if (!f.aging) { b.sinAging++; return; }
@@ -223,7 +240,7 @@ function porCliente_(folios) {
   const por = {};
   folios.forEach(function(f) {
     const clave = f.empresa;
-    if (!por[clave]) por[clave] = { empresa: clave, reciente: 0, atencion: 0, critico: 0, sinAging: 0, total: 0 };
+    if (!por[clave]) por[clave] = nuevoAcumuladorAging_({ empresa: clave });
     const b = por[clave];
     b.total++;
     if (!f.aging) { b.sinAging++; return; }
@@ -241,7 +258,7 @@ function porEvento_(folios) {
   folios.forEach(function(f) {
     const clave = f.ultimoEvento || '(vacío)';
     if (!por[clave]) {
-      por[clave] = { codigo: clave, etapa: f.etapa.etiqueta, reciente: 0, atencion: 0, critico: 0, sinAging: 0, total: 0 };
+      por[clave] = nuevoAcumuladorAging_({ codigo: clave, etapa: f.etapa.etiqueta });
     }
     const b = por[clave];
     b.total++;
@@ -316,6 +333,7 @@ function getBacklogData(params) {
     if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
     if (params.proveedor && f.proveedor !== params.proveedor) return false;
     if (params.donVeloz && f.donVeloz !== params.donVeloz) return false;
+    if (params.noIntentado && !f.noIntentado) return false;
     if (params.etapa && etapaDe_(f.ultimoEvento).clave !== params.etapa) return false;
     if (params.evento && f.ultimoEvento !== params.evento) return false;
     if (etaDesde && (!f.eta || f.eta < etaDesde)) return false;
