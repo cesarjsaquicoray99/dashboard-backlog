@@ -239,6 +239,23 @@ function porProveedor_(folios) {
     .sort(function(a, b) { return b.total - a.total; });
 }
 
+// Backlog agrupado por Don Veloz ("Último evento: Nombre Don Veloz"), mismo desglose de
+// aging que porProveedor_. Los folios sin Don Veloz asignado se agrupan bajo "Sin Don Veloz
+// asignado" en vez de perderse (agregada 20 ago 2026).
+function porDonVeloz_(folios) {
+  const por = {};
+  folios.forEach(function(f) {
+    const clave = f.donVeloz || 'Sin Don Veloz asignado';
+    if (!por[clave]) por[clave] = nuevoAcumuladorAging_({ donVeloz: clave });
+    const b = por[clave];
+    b.total++;
+    if (!f.aging) { b.sinAging++; return; }
+    b[f.aging.clave]++;
+  });
+  return Object.keys(por).map(function(k) { return por[k]; })
+    .sort(function(a, b) { return b.total - a.total; });
+}
+
 // Backlog agrupado por empresa (cliente), mismo desglose de aging que porEtapa_/porProveedor_.
 function porCliente_(folios) {
   const por = {};
@@ -350,26 +367,43 @@ function getBacklogData(params) {
 
   const etaDesde = params.etaDesde ? new Date(params.etaDesde + 'T00:00:00') : null;
   const etaHasta = params.etaHasta ? new Date(params.etaHasta + 'T23:59:59') : null;
+  // Rango de "Último evento: Fecha" — solo se setea clickeando una barra de "Backlog por
+  // último movimiento" (agregado 20 ago 2026); no tiene inputs propios en la barra de
+  // filtros, a diferencia de ETA.
+  const ultimoEventoDesde = params.ultimoEventoDesde ? new Date(params.ultimoEventoDesde + 'T00:00:00') : null;
+  const ultimoEventoHasta = params.ultimoEventoHasta ? new Date(params.ultimoEventoHasta + 'T23:59:59') : null;
 
   const filtrados = enBacklog.filter(function(f) {
     if (params.empresas && params.empresas.length && params.empresas.indexOf(f.empresa) === -1) return false;
     if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
     if (params.proveedores && params.proveedores.length && params.proveedores.indexOf(f.proveedor) === -1) return false;
-    if (params.donVeloz && f.donVeloz !== params.donVeloz) return false;
+    if (params.donVeloces && params.donVeloces.length && params.donVeloces.indexOf(f.donVeloz) === -1) return false;
     if (params.noIntentado && !f.noIntentado) return false;
     if (params.etapas && params.etapas.length && params.etapas.indexOf(etapaDe_(f.ultimoEvento).clave) === -1) return false;
     if (params.eventos && params.eventos.length && params.eventos.indexOf(f.ultimoEvento) === -1) return false;
     if (etaDesde && (!f.eta || f.eta < etaDesde)) return false;
     if (etaHasta && (!f.eta || f.eta > etaHasta)) return false;
+    if (ultimoEventoDesde && (!f.ultimoEventoFecha || f.ultimoEventoFecha < ultimoEventoDesde)) return false;
+    if (ultimoEventoHasta && (!f.ultimoEventoFecha || f.ultimoEventoFecha > ultimoEventoHasta)) return false;
     return true;
   });
 
-  const enriquecidos = filtrados.map(function(f) {
+  let enriquecidos = filtrados.map(function(f) {
     const etapa = etapaDe_(f.ultimoEvento);
     const dias = f.ultimoEventoFecha ? diasEntre_(f.ultimoEventoFecha, hoy) : null;
     const aging = dias != null ? bucketAging_(dias) : null;
     return Object.assign({}, f, { etapa: etapa, dias: dias, aging: aging });
   });
+
+  // Filtro por bucket de aging (clic en un gajo de la dona, agregado 20 ago 2026) — va
+  // después del enriquecido porque `aging` recién se calcula ahí. 'sin_aging' es la clave
+  // que usa porAging_ para "Sin fecha de evento" (folios con f.aging null).
+  if (params.agingBuckets && params.agingBuckets.length) {
+    enriquecidos = enriquecidos.filter(function(f) {
+      const clave = f.aging ? f.aging.clave : 'sin_aging';
+      return params.agingBuckets.indexOf(clave) !== -1;
+    });
+  }
 
   return {
     opciones: opciones,
@@ -378,6 +412,7 @@ function getBacklogData(params) {
     kpis: calcularKpis_(enriquecidos),
     porEtapa: porEtapa_(enriquecidos),
     porProveedor: porProveedor_(enriquecidos),
+    porDonVeloz: porDonVeloz_(enriquecidos),
     porCliente: porCliente_(enriquecidos),
     porEvento: porEvento_(enriquecidos),
     porUltimoEvento: porUltimoEvento_(enriquecidos),

@@ -140,6 +140,9 @@ h1 { font-size: 18px; font-weight: 600; }
 
 .leyenda { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--text-secondary); }
 .leyenda .punto { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.leyenda-clic { cursor: pointer; border-radius: 4px; padding: 1px 4px; margin: -1px -4px; }
+.leyenda-clic:hover { background: var(--page); }
+.leyenda-clic.activa { font-weight: 600; color: var(--brand-blue); }
 
 th.ordenable { cursor: pointer; user-select: none; }
 th.ordenable:hover { color: var(--text-primary); }
@@ -216,7 +219,16 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
     </div>
   </div>
-  <div class="filtro"><label>Don Veloz</label><select id="f-donveloz"><option value="">Todos</option></select></div>
+  <div class="filtro"><label>Don Veloz</label>
+    <div class="multisel" id="f-donveloz-box">
+      <button type="button" id="f-donveloz-btn">Todos</button>
+      <div class="multisel-panel oculto" id="f-donveloz-panel">
+        <input type="text" id="f-donveloz-buscar" placeholder="Buscar Don Veloz…">
+        <div class="multisel-opciones" id="f-donveloz-opciones"></div>
+        <button type="button" class="multisel-limpiar" id="f-donveloz-limpiar">Limpiar selección</button>
+      </div>
+    </div>
+  </div>
   <div class="filtro filtro-check">
     <input type="checkbox" id="f-no-intentado">
     <label for="f-no-intentado" title="Sin fecha de 1er evento de entrega fallida ni de entrega confirmada">No intentados</label>
@@ -299,6 +311,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
   <div class="grid-cards una">
     <div class="card">
+      <h2>Backlog por veloz</h2>
+      <div class="nota">Folios en backlog atribuidos al Don Veloz actual ("Último evento: Nombre Don Veloz"), desglosados por antigüedad. Clic en un encabezado para ordenar.</div>
+      <div class="tabla-scroll" id="t-donveloz"></div>
+    </div>
+  </div>
+
+  <div class="grid-cards una">
+    <div class="card">
       <h2>Backlog por evento</h2>
       <div class="nota">Folios en backlog por código crudo de "Último evento: Evento" (sin pasar por el mapeo de etapas) — permite ver a qué etapa cae cada código y detectar los que quedan "Otro / sin clasificar". Clic en un encabezado para ordenar.</div>
       <div class="tabla-scroll" id="t-evento"></div>
@@ -338,6 +358,14 @@ const BUCKETS_AGING = [
   { clave: 'atencion', etiqueta: '3–5 días', color: 'warning' },
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical' }
 ];
+
+// 'sin_aging' no está en BUCKETS_AGING (no es un bucket de días, es "no tiene fecha de
+// evento") pero sí es un valor clickeable de la dona y por lo tanto un valor válido de
+// agingSel — de ahí el fallback.
+function etiquetaAging_(clave) {
+  const b = BUCKETS_AGING.find(b => b.clave === clave);
+  return b ? b.etiqueta : 'Sin fecha de evento';
+}
 
 const textoCentro = {
   id: 'textoCentro',
@@ -506,20 +534,30 @@ function graficaDona(porAging, total) {
   const criticos = (porAging.find(b => b.clave === 'critico') || {}).total || 0;
   const pctCriticos = total ? Math.round(criticos / total * 1000) / 10 : null;
   document.getElementById('lista-aging').innerHTML = porAging.map(b =>
-    '<span><span class="punto" style="background:' + colorEstado(b.color) + '"></span>' +
+    '<span class="leyenda-clic' + (agingSel.has(b.clave) ? ' activa' : '') + '" data-valor="' + esc(b.clave) + '">' +
+    '<span class="punto" style="background:' + colorEstado(b.color) + '"></span>' +
     b.etiqueta + ': <strong>' + b.total + '</strong></span>').join('');
+  const hayAgingActivo = agingSel.size > 0;
   charts.dona = new Chart(document.getElementById('ch-dona'), {
     type: 'doughnut',
     data: {
       labels: porAging.map(b => b.etiqueta),
       datasets: [{
         data: porAging.map(b => b.total),
-        backgroundColor: porAging.map(b => colorEstado(b.color)),
+        backgroundColor: porAging.map(b =>
+          colorEstado(b.color) + (hayAgingActivo && !agingSel.has(b.clave) ? '4d' : '')),
         borderColor: css('--surface-1'), borderWidth: 2, hoverOffset: 4
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '68%',
+      onClick: function(evt, elementos) {
+        if (!elementos.length) return;
+        alternarAging(porAging[elementos[0].index].clave);
+      },
+      onHover: function(evt, elementos) {
+        evt.native.target.style.cursor = elementos.length ? 'pointer' : 'default';
+      },
       plugins: {
         textoCentro: { valor: fmt(pctCriticos, '%'), sub: 'críticos' },
         legend: { display: false }, // la leyenda ya la pinta #lista-aging (HTML propio, debajo)
@@ -560,13 +598,28 @@ function graficaEtapa(porEtapa) {
   opts.plugins.tooltip.callbacks = {
     footer: c => c.length ? porEtapa[c[0].dataIndex].total + ' folios en total' : ''
   };
+  // Clic en una barra = mismo toggle que clickear la fila de la tabla (alternarEtapa);
+  // si hay etapas seleccionadas, las no seleccionadas se atenúan (mismo truco de alfa en
+  // hex que el resto de los charts clickeables).
+  const hayEtapaActiva = etapasSel.size > 0;
+  const alfaEtapa = e => hayEtapaActiva && !etapasSel.has(e.etapa) ? '4d' : '';
+  opts.onClick = function(evt, elementos) {
+    if (!elementos.length) return;
+    const e = porEtapa[elementos[0].index];
+    alternarEtapa(e.etapa, e.etiqueta);
+  };
+  opts.onHover = function(evt, elementos) {
+    evt.native.target.style.cursor = elementos.length ? 'pointer' : 'default';
+  };
   const datasets = BUCKETS_AGING.map(function(b) {
     return { label: b.etiqueta, data: porEtapa.map(e => e[b.clave]),
-      backgroundColor: colorEstado(b.color), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' };
+      backgroundColor: porEtapa.map(e => colorEstado(b.color) + alfaEtapa(e)),
+      maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' };
   });
   if (conSinAging) {
     datasets.push({ label: 'Sin fecha de evento', data: porEtapa.map(e => e.sinAging),
-      backgroundColor: css('--status-muted'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' });
+      backgroundColor: porEtapa.map(e => css('--status-muted') + alfaEtapa(e)),
+      maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' });
   }
   charts.etapa = new Chart(document.getElementById('ch-etapa'), {
     type: 'bar',
@@ -583,6 +636,27 @@ let etapasSel = new Set();
 let etapasEtiquetas = {};
 let eventosSel = new Set();
 let eventosEtapas = {};
+
+// Compartida por la fila de la tabla y la barra de la gráfica de "Backlog por etapa"
+// (clickear cualquiera de las dos hace lo mismo).
+function alternarEtapa(clave, etiqueta) {
+  if (etapasSel.has(clave)) etapasSel.delete(clave);
+  else { etapasSel.add(clave); etapasEtiquetas[clave] = etiqueta; }
+  cargar();
+}
+
+// Clic en un gajo de la dona de antigüedad — Set de claves de bucket ('hoy', 'reciente',
+// 'atencion', 'critico', 'sin_aging'), mismo patrón que etapasSel/eventosSel.
+let agingSel = new Set();
+function alternarAging(clave) {
+  if (agingSel.has(clave)) agingSel.delete(clave); else agingSel.add(clave);
+  cargar();
+}
+
+// Clic en una barra de "Backlog por último movimiento" — a diferencia de etapa/evento/aging
+// es un solo rango a la vez (no tiene sentido acumular varios rangos de fecha sueltos), por
+// eso es un objeto único y no un Set: { desde, hasta, etiqueta } | null.
+let filtroUltimoMov = null;
 
 function pintarTablaEtapa(porEtapa) {
   const conSinAging = porEtapa.some(e => e.sinAging > 0);
@@ -624,13 +698,14 @@ function nombreMes_(yyyyMM) {
 
 // Re-agrupa los buckets diarios que manda el backend a semana o mes (sin volver a pedir
 // datos al servidor). Cada punto trae `etiqueta` (fecha/rango completo, para "Ver tabla"),
-// `tick` (etiqueta corta del eje X — número de día, "Wnn" de semana, u oculta en mes) y
-// `mesKey` ('yyyy-MM', para agrupar visualmente por mes en graficaFecha/ejeAgrupado).
+// `tick` (etiqueta corta del eje X — número de día, "Wnn" de semana, u oculta en mes),
+// `mesKey` ('yyyy-MM', para agrupar visualmente por mes en graficaFecha/ejeAgrupado) y
+// `desde`/`hasta` (rango real en fechas ISO — para filtrar al clickear la barra).
 function agregarFecha(diarios, gran) {
   if (gran === 'dia') {
     return diarios.map(d => ({
       etiqueta: d.fecha, tick: String(Number(d.fecha.slice(8, 10))),
-      mesKey: d.fecha.slice(0, 7), total: d.total
+      mesKey: d.fecha.slice(0, 7), desde: d.fecha, hasta: d.fecha, total: d.total
     }));
   }
   const por = {};
@@ -640,9 +715,15 @@ function agregarFecha(diarios, gran) {
   });
   return Object.keys(por).sort().map(function(k) {
     if (gran === 'semana') {
-      return { etiqueta: 'Sem. del ' + k, tick: 'W' + semanaIso_(k), mesKey: k.slice(0, 7), total: por[k] };
+      const finSemana = new Date(k + 'T00:00:00');
+      finSemana.setDate(finSemana.getDate() + 6);
+      return { etiqueta: 'Sem. del ' + k, tick: 'W' + semanaIso_(k), mesKey: k.slice(0, 7),
+        desde: k, hasta: finSemana.toISOString().slice(0, 10), total: por[k] };
     }
-    return { etiqueta: nombreMes_(k) + ' ' + k.slice(0, 4), tick: '', mesKey: k, total: por[k] };
+    // mes: último día = día 0 del mes siguiente
+    const finMes = new Date(Number(k.slice(0, 4)), Number(k.slice(5, 7)), 0);
+    return { etiqueta: nombreMes_(k) + ' ' + k.slice(0, 4), tick: '', mesKey: k,
+      desde: k + '-01', hasta: finMes.toISOString().slice(0, 10), total: por[k] };
   });
 }
 
@@ -663,7 +744,10 @@ function gruposPorMes(serie) {
 // usaba la única "Evolución del backlog"; ahora hay dos instancias — por último movimiento
 // y por ETA — cada una con su propio estado y sus propios ids en el DOM: canvas `ch-<prefijo>`,
 // botones `btn-<prefijo>-dia/semana/mes`, tabla `t-<prefijo>`).
-function crearSerieTemporal(prefijo) {
+// `cfg.onBarClick(item)` — qué hacer al clickear una barra (item = punto de la serie, con
+// `desde`/`hasta`/`etiqueta`); `cfg.esActivo(item)` — si esa barra es el filtro activo ahora
+// (para atenuar las demás), consultado en cada render.
+function crearSerieTemporal(prefijo, cfg) {
   let datos = [];
   let gran = 'dia';
 
@@ -686,6 +770,15 @@ function crearSerieTemporal(prefijo) {
       title: c => c.length ? serie[c[0].dataIndex].etiqueta : '',
       label: c => ' ' + c.parsed.y + ' folios en backlog'
     };
+    const activos = serie.map(cfg.esActivo);
+    const hayActivo = activos.some(Boolean);
+    opts.onClick = function(evt, elementos) {
+      if (!elementos.length) return;
+      cfg.onBarClick(serie[elementos[0].index]);
+    };
+    opts.onHover = function(evt, elementos) {
+      evt.native.target.style.cursor = elementos.length ? 'pointer' : 'default';
+    };
     charts[prefijo] = new Chart(document.getElementById('ch-' + prefijo), {
       type: 'bar',
       data: {
@@ -693,7 +786,8 @@ function crearSerieTemporal(prefijo) {
         datasets: [{
           label: 'Backlog',
           data: serie.map(s => s.total),
-          backgroundColor: css('--brand-blue'), maxBarThickness: 28, borderRadius: 3
+          backgroundColor: serie.map((s, i) => css('--brand-blue') + (hayActivo && !activos[i] ? '4d' : '')),
+          maxBarThickness: 28, borderRadius: 3
         }]
       },
       options: opts
@@ -715,11 +809,37 @@ function crearSerieTemporal(prefijo) {
   document.getElementById('btn-' + prefijo + '-semana').addEventListener('click', () => cambiarGran('semana'));
   document.getElementById('btn-' + prefijo + '-mes').addEventListener('click', () => cambiarGran('mes'));
 
-  return { llenarDatos: function(nuevosDatos) { datos = nuevosDatos; graficar(); } };
+  return { llenarDatos: function(nuevosDatos) { datos = nuevosDatos; graficar(); }, graficar: graficar };
 }
 
-const ultimoMovimientoSerie = crearSerieTemporal('ultmov');
-const etaSerie = crearSerieTemporal('eta');
+// Clic en "Backlog por ETA" reusa los mismos inputs de fecha de la barra de filtros
+// (mismo filtro, dos formas de setearlo); clic de nuevo en la misma barra los limpia.
+const etaSerie = crearSerieTemporal('eta', {
+  onBarClick: function(item) {
+    const ed = document.getElementById('f-eta-desde'), eh = document.getElementById('f-eta-hasta');
+    const yaActivo = ed.value === item.desde && eh.value === item.hasta;
+    ed.value = yaActivo ? '' : item.desde;
+    eh.value = yaActivo ? '' : item.hasta;
+    cargar();
+  },
+  esActivo: function(item) {
+    return document.getElementById('f-eta-desde').value === item.desde &&
+      document.getElementById('f-eta-hasta').value === item.hasta;
+  }
+});
+
+// Clic en "Backlog por último movimiento" — no tiene inputs propios en la barra de
+// filtros, vive solo en `filtroUltimoMov` (ver declaración más arriba).
+const ultimoMovimientoSerie = crearSerieTemporal('ultmov', {
+  onBarClick: function(item) {
+    const yaActivo = filtroUltimoMov && filtroUltimoMov.desde === item.desde && filtroUltimoMov.hasta === item.hasta;
+    filtroUltimoMov = yaActivo ? null : { desde: item.desde, hasta: item.hasta, etiqueta: item.etiqueta };
+    cargar();
+  },
+  esActivo: function(item) {
+    return !!filtroUltimoMov && filtroUltimoMov.desde === item.desde && filtroUltimoMov.hasta === item.hasta;
+  }
+});
 
 function tabla(id, cabeceras, filas) {
   const el = document.getElementById(id);
@@ -791,6 +911,7 @@ function pintarDetalle() {
 // Misma forma de datos ({ ...claves de BUCKETS_AGING, sinAging, total, ...clave(s) });
 // una sola función de render parametrizada por la(s) columna(s) identificadoras.
 let datosProveedor = [], sortProveedor = { key: 'total', dir: -1 };
+let datosDonVeloz = [], sortDonVeloz = { key: 'total', dir: -1 };
 let datosCliente = [], sortCliente = { key: 'total', dir: -1 };
 let datosEvento = [], sortEvento = { key: 'total', dir: -1 };
 
@@ -819,6 +940,9 @@ function pintarTablaAgrupada(contId, datos, s, colsIdentidad, activoSel) {
 
 function pintarProveedores() {
   pintarTablaAgrupada('t-proveedor', datosProveedor, sortProveedor, [['proveedor', 'Proveedor']], proveedoresMS.sel);
+}
+function pintarDonVeloz() {
+  pintarTablaAgrupada('t-donveloz', datosDonVeloz, sortDonVeloz, [['donVeloz', 'Don Veloz']], donVelocesMS.sel);
 }
 function pintarClientes() {
   pintarTablaAgrupada('t-cliente', datosCliente, sortCliente, [['empresa', 'Empresa']], empresasMS.sel);
@@ -849,6 +973,10 @@ wireTabla('t-proveedor', {
   obtenerSort: () => sortProveedor, fijarSort: s => sortProveedor = s, repintar: pintarProveedores,
   onFilaClick: function(valor) { proveedoresMS.alternar(valor); cargar(); }
 });
+wireTabla('t-donveloz', {
+  obtenerSort: () => sortDonVeloz, fijarSort: s => sortDonVeloz = s, repintar: pintarDonVeloz,
+  onFilaClick: function(valor) { donVelocesMS.alternar(valor); cargar(); }
+});
 wireTabla('t-cliente', {
   obtenerSort: () => sortCliente, fijarSort: s => sortCliente = s, repintar: pintarClientes,
   onFilaClick: function(valor) { empresasMS.alternar(valor); cargar(); }
@@ -865,9 +993,7 @@ wireTabla('t-evento', {
 wireTabla('t-etapa', {
   onFilaClick: function(valor, fila) {
     const etiqueta = fila.children[0] ? fila.children[0].textContent : valor;
-    if (etapasSel.has(valor)) etapasSel.delete(valor);
-    else { etapasSel.add(valor); etapasEtiquetas[valor] = etiqueta; }
-    cargar();
+    alternarEtapa(valor, etiqueta);
   }
 });
 
@@ -964,6 +1090,7 @@ function crearMultisel(prefijo, todas, plural) {
 
 const empresasMS = crearMultisel('f-empresa', 'Todas', 'empresas');
 const proveedoresMS = crearMultisel('f-proveedor', 'Todos', 'proveedores');
+const donVelocesMS = crearMultisel('f-donveloz', 'Todos', 'veloces');
 
 document.addEventListener('click', function() {
   document.querySelectorAll('.multisel-panel').forEach(p => p.classList.add('oculto'));
@@ -974,12 +1101,15 @@ function cargar() {
     empresas: empresasMS.sel.size ? Array.from(empresasMS.sel) : null,
     tipoEnvio: document.getElementById('f-tipo').value || null,
     proveedores: proveedoresMS.sel.size ? Array.from(proveedoresMS.sel) : null,
-    donVeloz: document.getElementById('f-donveloz').value || null,
+    donVeloces: donVelocesMS.sel.size ? Array.from(donVelocesMS.sel) : null,
     noIntentado: document.getElementById('f-no-intentado').checked || null,
     etaDesde: document.getElementById('f-eta-desde').value || null,
     etaHasta: document.getElementById('f-eta-hasta').value || null,
+    ultimoEventoDesde: filtroUltimoMov ? filtroUltimoMov.desde : null,
+    ultimoEventoHasta: filtroUltimoMov ? filtroUltimoMov.hasta : null,
     etapas: etapasSel.size ? Array.from(etapasSel) : null,
-    eventos: eventosSel.size ? Array.from(eventosSel) : null
+    eventos: eventosSel.size ? Array.from(eventosSel) : null,
+    agingBuckets: agingSel.size ? Array.from(agingSel) : null
   };
   document.getElementById('contenido').classList.add('cargando');
   document.getElementById('error').style.display = 'none';
@@ -999,7 +1129,7 @@ function pintar(d) {
   empresasMS.llenarOpciones(d.opciones.empresas);
   llenarSelect('f-tipo', d.opciones.tiposEnvio, document.getElementById('f-tipo').value);
   proveedoresMS.llenarOpciones(d.opciones.proveedores);
-  llenarSelect('f-donveloz', d.opciones.donVeloces, document.getElementById('f-donveloz').value);
+  donVelocesMS.llenarOpciones(d.opciones.donVeloces);
 
   pintarKpis(d.kpis);
   graficaDona(d.porAging, d.kpis.total);
@@ -1010,6 +1140,8 @@ function pintar(d) {
 
   datosProveedor = d.porProveedor;
   pintarProveedores();
+  datosDonVeloz = d.porDonVeloz;
+  pintarDonVeloz();
   datosCliente = d.porCliente;
   pintarClientes();
   datosEvento = d.porEvento;
@@ -1039,14 +1171,18 @@ function chipsActivos() {
     chips.push({ tipo: 'proveedores',
       etiqueta: 'Proveedor: ' + (proveedoresMS.sel.size === 1 ? Array.from(proveedoresMS.sel)[0] : proveedoresMS.sel.size + ' seleccionados') });
   }
-  const dv = document.getElementById('f-donveloz').value;
-  if (dv) chips.push({ tipo: 'donveloz', etiqueta: 'Don Veloz: ' + dv });
+  if (donVelocesMS.sel.size) {
+    chips.push({ tipo: 'donveloces',
+      etiqueta: 'Don Veloz: ' + (donVelocesMS.sel.size === 1 ? Array.from(donVelocesMS.sel)[0] : donVelocesMS.sel.size + ' seleccionados') });
+  }
   if (document.getElementById('f-no-intentado').checked) chips.push({ tipo: 'noIntentado', etiqueta: 'No intentados' });
   const ed = document.getElementById('f-eta-desde').value, eh = document.getElementById('f-eta-hasta').value;
   if (ed || eh) chips.push({ tipo: 'eta', etiqueta: 'ETA: ' + (ed || '…') + ' – ' + (eh || '…') });
+  if (filtroUltimoMov) chips.push({ tipo: 'ultimoMov', etiqueta: 'Último movimiento: ' + filtroUltimoMov.etiqueta });
   etapasSel.forEach(clave => chips.push({ tipo: 'etapa:' + clave, etiqueta: 'Etapa: ' + etapasEtiquetas[clave] }));
   eventosSel.forEach(codigo => chips.push({ tipo: 'evento:' + codigo,
     etiqueta: 'Evento: ' + codigo + ' (' + eventosEtapas[codigo] + ')' }));
+  agingSel.forEach(clave => chips.push({ tipo: 'aging:' + clave, etiqueta: 'Antigüedad: ' + etiquetaAging_(clave) }));
   return chips;
 }
 
@@ -1064,11 +1200,13 @@ function quitarFiltro(tipo) {
   if (tipo === 'empresas') empresasMS.limpiar();
   else if (tipo === 'tipo') document.getElementById('f-tipo').value = '';
   else if (tipo === 'proveedores') proveedoresMS.limpiar();
-  else if (tipo === 'donveloz') document.getElementById('f-donveloz').value = '';
+  else if (tipo === 'donveloces') donVelocesMS.limpiar();
   else if (tipo === 'noIntentado') document.getElementById('f-no-intentado').checked = false;
   else if (tipo === 'eta') { document.getElementById('f-eta-desde').value = ''; document.getElementById('f-eta-hasta').value = ''; }
+  else if (tipo === 'ultimoMov') filtroUltimoMov = null;
   else if (tipo.indexOf('etapa:') === 0) etapasSel.delete(tipo.slice(6));
   else if (tipo.indexOf('evento:') === 0) eventosSel.delete(tipo.slice(7));
+  else if (tipo.indexOf('aging:') === 0) agingSel.delete(tipo.slice(6));
   cargar();
 }
 
@@ -1076,12 +1214,14 @@ function limpiarFiltros() {
   empresasMS.limpiar();
   document.getElementById('f-tipo').value = '';
   proveedoresMS.limpiar();
-  document.getElementById('f-donveloz').value = '';
+  donVelocesMS.limpiar();
   document.getElementById('f-no-intentado').checked = false;
   document.getElementById('f-eta-desde').value = '';
   document.getElementById('f-eta-hasta').value = '';
+  filtroUltimoMov = null;
   etapasSel.clear();
   eventosSel.clear();
+  agingSel.clear();
   cargar();
 }
 
@@ -1089,6 +1229,11 @@ document.getElementById('chips-filtro').addEventListener('click', function(e) {
   if (e.target.closest('#btn-limpiar-todo')) { limpiarFiltros(); return; }
   const btn = e.target.closest('button[data-quitar]');
   if (btn) quitarFiltro(btn.dataset.quitar);
+});
+
+document.getElementById('lista-aging').addEventListener('click', function(e) {
+  const el = e.target.closest('[data-valor]');
+  if (el) alternarAging(el.dataset.valor);
 });
 
 document.getElementById('btn-aplicar').addEventListener('click', cargar);

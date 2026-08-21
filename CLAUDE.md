@@ -116,8 +116,11 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
     `graficaFecha`/`cambiarGranFecha` de una sola instancia) — cada instancia tiene su
     propio estado y sus propios ids en el DOM: canvas `ch-<prefijo>`, botones
     `btn-<prefijo>-dia/semana/mes`, tabla `t-<prefijo>` (prefijos actuales: `ultmov`, `eta`).
-    Si se agrega una tercera serie temporal, se llama `crearSerieTemporal('<prefijo-nuevo>')`
-    con sus botones/canvas/tabla ya en el HTML — no hay que duplicar la lógica.
+    Si se agrega una tercera serie temporal, se llama
+    `crearSerieTemporal('<prefijo-nuevo>', { onBarClick, esActivo })` con sus
+    botones/canvas/tabla ya en el HTML — no hay que duplicar la lógica. `onBarClick(item)` y
+    `esActivo(item)` (agregados 20 ago 2026, ver "Filas/gráficas como filtro" abajo) son
+    obligatorios en `cfg` — sin ellos el gráfico no sabe qué hacer al clickear una barra.
   - **Eje X agrupado por mes** (plugin casero `ejeAgrupado` en `Index.html`, compartido por
     ambas): en Día el eje muestra el número de día y en Semana el número de semana ISO
     ("Wnn"), con una fila debajo con el nombre del mes y una línea separadora en cada cambio
@@ -125,8 +128,10 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
     solo queda esa fila (nombre del mes + separador entre cada una). La agrupación asume que
     los datos del backend vienen ordenados por fecha (tramos de mes contiguos, sin huecos) —
     si eso cambia, `gruposPorMes` deja de servir.
-- **Backlog por cliente** / **Backlog por proveedor**: tablas ordenables (clic en encabezado),
-  mismo desglose de aging que la etapa (`porCliente_`/`porProveedor_` en `Code.gs`).
+- **Backlog por cliente** / **Backlog por proveedor** / **Backlog por veloz**: tablas
+  ordenables (clic en encabezado), mismo desglose de aging que la etapa
+  (`porCliente_`/`porProveedor_`/`porDonVeloz_` en `Code.gs`). "Backlog por veloz" se agregó
+  el 20 ago 2026 debajo de "Backlog por proveedor", a pedido del usuario.
 - **Backlog por evento**: tabla ordenable por el código crudo de 4 caracteres (sin pasar por
   el mapeo de `ETAPAS`), con la etapa resuelta como columna adicional — sirve como vista
   rápida de qué códigos caen en "Otro / sin clasificar" sin tener que abrir el editor de
@@ -148,32 +153,58 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   en `Index.html` — misma forma de datos desde el backend (`{...claves de BUCKETS_AGING,
   sinAging, total, ...clave(s)}`), solo cambia la(s) columna(s) identificadora(s).
 
-## Filas de tabla como filtro (cross-filter, multi-selección desde el 20 ago 2026)
-- Clic en una fila de **Cliente**, **Proveedor**, **Evento** o **Etapa** suma ese valor al
-  filtro (no lo reemplaza) y recarga (`cargar()`); clic en una fila ya activa la quita. Se
-  puede seleccionar más de un cliente/proveedor/etapa/evento a la vez — el filtro resultante
-  es la unión (OR) dentro de cada dimensión, AND entre dimensiones distintas. Antes (hasta
-  v8) clickear reemplazaba la selección completa; el cambio fue pedido explícitamente por
-  el usuario porque al clickear un segundo cliente se perdía el primero.
-- Las 4 dimensiones se guardan como `Set` en el frontend, nunca como un valor único:
-  - **Empresa** y **Proveedor**: cada uno tiene su propio widget multiselect (buscador +
-    checkboxes) en la barra de filtros, creados con la fábrica genérica `crearMultisel()`
-    en `Index.html` (antes solo Empresa tenía este widget; Proveedor era un `<select>`
-    simple — se unificó para poder acumular selección tanto desde la barra como desde la
-    fila de la tabla, sin dos mecanismos distintos para el mismo campo). `crearMultisel()`
-    devuelve `{ sel, llenarOpciones, alternar, limpiar }`; `sel` es el Set que comparten la
-    barra y el clic en fila.
-  - **Etapa** y **Evento** no tienen control propio en la barra (nunca lo tuvieron): viven
-    en `etapasSel`/`eventosSel` (Sets de clave/código) + `etapasEtiquetas`/`eventosEtapas`
-    (mapas clave→etiqueta, solo para poder mostrar el chip sin recalcularlo).
-  - Se mandan como `params.empresas`/`params.proveedores`/`params.etapas`/`params.eventos`
-    (arrays) a `getBacklogData`, que filtra con `indexOf(...) !== -1` contra cada uno
-    (mismo patrón para las 4, ver `Code.gs`).
-- **Chips de filtros activos** (`#chips-filtro`): Empresa/Proveedor muestran un solo chip
-  colapsado ("Proveedor: 3 seleccionados", igual que Empresa); Etapa/Evento muestran **un
+## Filas/gráficas como filtro (cross-filter, multi-selección desde el 20 ago 2026)
+- Clic en una fila de **Cliente**, **Proveedor**, **Don Veloz**, **Evento** o **Etapa** suma
+  ese valor al filtro (no lo reemplaza) y recarga (`cargar()`); clic en una fila ya activa
+  la quita. Se puede seleccionar más de uno a la vez por dimensión — el filtro resultante es
+  la unión (OR) dentro de cada dimensión, AND entre dimensiones distintas. Antes (hasta v8)
+  clickear reemplazaba la selección completa; el cambio fue pedido explícitamente por el
+  usuario porque al clickear un segundo cliente se perdía el primero.
+- **Clic en las gráficas** (agregado 20 ago 2026, a pedido del usuario — "que los gráficos
+  también funcionen como filtros") hace exactamente lo mismo que clickear la fila
+  equivalente, no es un mecanismo aparte:
+  - **Backlog por etapa** (barra apilada): clic en una barra llama a la misma
+    `alternarEtapa(clave, etiqueta)` que usa la fila de la tabla de etapa.
+  - **Antigüedad del backlog** (dona): clic en un gajo O en la leyenda HTML `#lista-aging`
+    (agregada como alternativa clickeable porque el gajo de "críticos" es muy fino para
+    apuntarle) llama a `alternarAging(clave)` — nueva dimensión, no existía filtro por
+    bucket de aging antes de esto. Set `agingSel` (incluye `'sin_aging'`), filtro backend
+    `params.agingBuckets`, aplicado en `getBacklogData` **después** de enriquecer los folios
+    (el aging recién se calcula ahí).
+  - **Backlog por ETA** y **Backlog por último movimiento** (barras temporales): clic en una
+    barra filtra por ese rango de fecha exacto (día/semana/mes, según el toggle activo).
+    "Por ETA" reusa los mismos inputs `#f-eta-desde`/`#f-eta-hasta` de la barra de filtros
+    (mismo filtro, dos formas de setearlo); "por último movimiento" no tenía filtro de rango
+    propio, se agregó `params.ultimoEventoDesde`/`ultimoEventoHasta` en el backend y
+    `filtroUltimoMov` (objeto único, no Set — no tiene sentido acumular varios rangos de
+    fecha sueltos) en el frontend. `agregarFecha()` ahora devuelve también `desde`/`hasta`
+    por punto (rango ISO real) para poder armar este filtro al clickear.
+  - `crearSerieTemporal(prefijo, cfg)` recibe `cfg.onBarClick(item)`/`cfg.esActivo(item)` —
+    ver la sección de "Backlog por último movimiento y Backlog por ETA" arriba.
+  - Las barras/gajos no seleccionados se atenúan (sufijo hex `'4d'` sobre el color, ~30% de
+    opacidad) cuando hay algo activo en esa gráfica — mismo truco en las 4 gráficas
+    clickeables, sin introducir un color nuevo fuera de la paleta.
+- Las dimensiones categóricas se guardan como `Set` en el frontend, nunca como un valor único:
+  - **Empresa**, **Proveedor** y **Don Veloz**: cada uno tiene su propio widget multiselect
+    (buscador + checkboxes) en la barra de filtros, creados con la fábrica genérica
+    `crearMultisel()` en `Index.html` (Don Veloz era un `<select>` simple hasta el 20 ago
+    2026 — se unificó igual que Proveedor, para que la barra y la fila de "Backlog por
+    veloz" compartan un solo Set en vez de dos mecanismos para el mismo campo).
+    `crearMultisel()` devuelve `{ sel, llenarOpciones, alternar, limpiar }`; `sel` es el Set
+    que comparten la barra y el clic en fila.
+  - **Etapa**, **Evento** y **Antigüedad (aging)** no tienen control propio en la barra
+    (nunca lo tuvieron): viven en `etapasSel`/`eventosSel`/`agingSel` (Sets de clave/código)
+    + `etapasEtiquetas`/`eventosEtapas` (mapas clave→etiqueta, solo para poder mostrar el
+    chip sin recalcularlo; aging no necesita mapa propio, usa `etiquetaAging_()`).
+  - Se mandan como `params.empresas`/`params.proveedores`/`params.donVeloces`/
+    `params.etapas`/`params.eventos`/`params.agingBuckets` (arrays) a `getBacklogData`, que
+    filtra con `indexOf(...) !== -1` contra cada uno (mismo patrón para todas, ver `Code.gs`).
+- **Chips de filtros activos** (`#chips-filtro`): Empresa/Proveedor/Don Veloz muestran un
+  solo chip colapsado ("Proveedor: 3 seleccionados"); Etapa/Evento/Antigüedad muestran **un
   chip por valor seleccionado** (no hay control de barra que los colapse) — cada chip se
-  quita individual con `tipo: 'etapa:<clave>'`/`'evento:<codigo>'`. "Limpiar todos" aparece
-  si hay 2+ filtros activos en total.
+  quita individual con `tipo: 'etapa:<clave>'`/`'evento:<codigo>'`/`'aging:<clave>'`. El
+  rango de "Último movimiento" es un chip único (`tipo: 'ultimoMov'`), igual que el chip
+  "ETA" ya existente. "Limpiar todos" aparece si hay 2+ filtros activos en total.
 - La fila activa se resalta (`.fila-filtrable.activa`) comparando contra el Set
   correspondiente (`activoSel.has(...)` en `pintarTablaAgrupada()`/`pintarTablaEtapa()`),
   no contra un valor único.
@@ -210,5 +241,3 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
 - **Ejecutar `debugEventos()`** contra datos reales para confirmar que `ETAPAS` cubre todos
   los códigos no terminales que aparecen en la hoja; ampliar el mapeo si "Sin clasificar"
   sale alto (aunque en la captura del 20 ago salió en 0).
-- El filtro "Don Veloz" es un `<select>` simple; si la lista de veloces crece mucho, migrar
-  a un multiselect con buscador (como el de Empresa).
