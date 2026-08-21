@@ -170,6 +170,21 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   la unión (OR) dentro de cada dimensión, AND entre dimensiones distintas. Antes (hasta v8)
   clickear reemplazaba la selección completa; el cambio fue pedido explícitamente por el
   usuario porque al clickear un segundo cliente se perdía el primero.
+- **Cada vista "por X" ignora su propio filtro al calcularse** (`filtrar_(excluir)` en
+  `getBacklogData`, `Code.gs`, agregado 21 ago 2026 — bug reportado por el usuario: al elegir
+  un proveedor, "Backlog por proveedor" colapsaba a esa única fila y ya no se podía agregar
+  un segundo proveedor porque los demás desaparecían de la tabla). Ahora, por ejemplo, con
+  proveedor="99minutos" activo: "Backlog por proveedor" sigue mostrando TODOS los
+  proveedores (para poder sumar otro a la selección), pero "Backlog por cliente"/"por
+  evento"/KPIs/etc. sí se acotan a los folios de 99minutos — el patrón clásico de facetas:
+  la vista de una dimensión ignora su propio filtro, todas las demás vistas lo respetan.
+  Aplica a las 8 vistas con filtro propio: etapa, proveedor, Don Veloz, cliente, evento,
+  aging (dona), ETA y último movimiento. Los KPIs y "Folios más antiguos" (`detalle`) usan
+  `filtrar_(null)` — SÍ reflejan todos los filtros, incluyendo los de su propia fila/gajo, a
+  propósito (no son una vista de facetas, son el resumen real de lo seleccionado). Por la
+  misma razón, `graficaDona()` calcula su "% críticos" con el total de **su propia**
+  `porAging` (que ignora el filtro de aging) y no con `kpis.total` (que sí lo refleja) — si
+  se mezclaran, el porcentaje no coincidiría con lo que muestra la dona.
 - **Clic en las gráficas** (agregado 20 ago 2026, a pedido del usuario — "que los gráficos
   también funcionen como filtros") hace exactamente lo mismo que clickear la fila
   equivalente, no es un mecanismo aparte:

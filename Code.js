@@ -365,6 +365,17 @@ function getBacklogData(params) {
     donVeloces: listaUnica_(enBacklog, 'donVeloz').filter(function(p) { return p !== ''; })
   };
 
+  // Enriquecido ANTES de filtrar: etapa/dias/aging no dependen de ningún filtro, solo de
+  // "hoy" — hace falta calcularlos antes porque el filtro de etapas/aging los necesita, y
+  // porque cada vista "por X" tiene que poder calcularse ignorando el filtro de X (ver
+  // filtrar_ abajo).
+  const enriquecidos = enBacklog.map(function(f) {
+    const etapa = etapaDe_(f.ultimoEvento);
+    const dias = f.ultimoEventoFecha ? diasEntre_(f.ultimoEventoFecha, hoy) : null;
+    const aging = dias != null ? bucketAging_(dias) : null;
+    return Object.assign({}, f, { etapa: etapa, dias: dias, aging: aging });
+  });
+
   const etaDesde = params.etaDesde ? new Date(params.etaDesde + 'T00:00:00') : null;
   const etaHasta = params.etaHasta ? new Date(params.etaHasta + 'T23:59:59') : null;
   // Rango de "Último evento: Fecha" — solo se setea clickeando una barra de "Backlog por
@@ -373,52 +384,61 @@ function getBacklogData(params) {
   const ultimoEventoDesde = params.ultimoEventoDesde ? new Date(params.ultimoEventoDesde + 'T00:00:00') : null;
   const ultimoEventoHasta = params.ultimoEventoHasta ? new Date(params.ultimoEventoHasta + 'T23:59:59') : null;
 
-  const filtrados = enBacklog.filter(function(f) {
-    if (params.empresas && params.empresas.length && params.empresas.indexOf(f.empresa) === -1) return false;
-    if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
-    if (params.proveedores && params.proveedores.length && params.proveedores.indexOf(f.proveedor) === -1) return false;
-    if (params.donVeloces && params.donVeloces.length && params.donVeloces.indexOf(f.donVeloz) === -1) return false;
-    if (params.noIntentado && !f.noIntentado) return false;
-    if (params.etapas && params.etapas.length && params.etapas.indexOf(etapaDe_(f.ultimoEvento).clave) === -1) return false;
-    if (params.eventos && params.eventos.length && params.eventos.indexOf(f.ultimoEvento) === -1) return false;
-    if (etaDesde && (!f.eta || f.eta < etaDesde)) return false;
-    if (etaHasta && (!f.eta || f.eta > etaHasta)) return false;
-    if (ultimoEventoDesde && (!f.ultimoEventoFecha || f.ultimoEventoFecha < ultimoEventoDesde)) return false;
-    if (ultimoEventoHasta && (!f.ultimoEventoFecha || f.ultimoEventoFecha > ultimoEventoHasta)) return false;
-    return true;
-  });
-
-  let enriquecidos = filtrados.map(function(f) {
-    const etapa = etapaDe_(f.ultimoEvento);
-    const dias = f.ultimoEventoFecha ? diasEntre_(f.ultimoEventoFecha, hoy) : null;
-    const aging = dias != null ? bucketAging_(dias) : null;
-    return Object.assign({}, f, { etapa: etapa, dias: dias, aging: aging });
-  });
-
-  // Filtro por bucket de aging (clic en un gajo de la dona, agregado 20 ago 2026) — va
-  // después del enriquecido porque `aging` recién se calcula ahí. 'sin_aging' es la clave
-  // que usa porAging_ para "Sin fecha de evento" (folios con f.aging null).
-  if (params.agingBuckets && params.agingBuckets.length) {
-    enriquecidos = enriquecidos.filter(function(f) {
-      const clave = f.aging ? f.aging.clave : 'sin_aging';
-      return params.agingBuckets.indexOf(clave) !== -1;
+  // Cada vista "por X" (etapa/proveedor/cliente/veloz/evento/aging/eta/último movimiento)
+  // tiene su propio control de filtro (multiselect, clic en fila, clic en barra). Si se
+  // calculara siempre sobre el set filtrado por TODOS los filtros, la vista de X quedaría
+  // reducida a un solo valor en cuanto se seleccionara algo de X, y ya no se podría agregar
+  // una segunda opción (bug reportado por el usuario 21 ago 2026: "Backlog por proveedor"
+  // colapsaba a 1 fila apenas se elegía un proveedor). `excluir` es la clave del filtro que
+  // ESTA llamada en particular debe ignorar — todo lo demás sigue aplicando (por eso, con
+  // proveedor filtrado, "por cliente"/"por evento" sí se acotan; solo "por proveedor" no se
+  // acota a sí mismo).
+  function filtrar_(excluir) {
+    return enriquecidos.filter(function(f) {
+      if (excluir !== 'empresas' && params.empresas && params.empresas.length &&
+          params.empresas.indexOf(f.empresa) === -1) return false;
+      if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
+      if (excluir !== 'proveedores' && params.proveedores && params.proveedores.length &&
+          params.proveedores.indexOf(f.proveedor) === -1) return false;
+      if (excluir !== 'donVeloces' && params.donVeloces && params.donVeloces.length &&
+          params.donVeloces.indexOf(f.donVeloz) === -1) return false;
+      if (params.noIntentado && !f.noIntentado) return false;
+      if (excluir !== 'etapas' && params.etapas && params.etapas.length &&
+          params.etapas.indexOf(f.etapa.clave) === -1) return false;
+      if (excluir !== 'eventos' && params.eventos && params.eventos.length &&
+          params.eventos.indexOf(f.ultimoEvento) === -1) return false;
+      if (excluir !== 'aging' && params.agingBuckets && params.agingBuckets.length) {
+        const clave = f.aging ? f.aging.clave : 'sin_aging';
+        if (params.agingBuckets.indexOf(clave) === -1) return false;
+      }
+      if (excluir !== 'eta') {
+        if (etaDesde && (!f.eta || f.eta < etaDesde)) return false;
+        if (etaHasta && (!f.eta || f.eta > etaHasta)) return false;
+      }
+      if (excluir !== 'ultimoEvento') {
+        if (ultimoEventoDesde && (!f.ultimoEventoFecha || f.ultimoEventoFecha < ultimoEventoDesde)) return false;
+        if (ultimoEventoHasta && (!f.ultimoEventoFecha || f.ultimoEventoFecha > ultimoEventoHasta)) return false;
+      }
+      return true;
     });
   }
+
+  const completo = filtrar_(null); // todos los filtros — para KPIs y el detalle de folios
 
   return {
     opciones: opciones,
     totalEnHoja: todos.length,
     totalBacklog: enBacklog.length,
-    kpis: calcularKpis_(enriquecidos),
-    porEtapa: porEtapa_(enriquecidos),
-    porProveedor: porProveedor_(enriquecidos),
-    porDonVeloz: porDonVeloz_(enriquecidos),
-    porCliente: porCliente_(enriquecidos),
-    porEvento: porEvento_(enriquecidos),
-    porUltimoEvento: porUltimoEvento_(enriquecidos),
-    porEta: porEta_(enriquecidos),
-    porAging: porAging_(enriquecidos),
-    detalle: detalleMasAntiguos_(enriquecidos),
+    kpis: calcularKpis_(completo),
+    porEtapa: porEtapa_(filtrar_('etapas')),
+    porProveedor: porProveedor_(filtrar_('proveedores')),
+    porDonVeloz: porDonVeloz_(filtrar_('donVeloces')),
+    porCliente: porCliente_(filtrar_('empresas')),
+    porEvento: porEvento_(filtrar_('eventos')),
+    porUltimoEvento: porUltimoEvento_(filtrar_('ultimoEvento')),
+    porEta: porEta_(filtrar_('eta')),
+    porAging: porAging_(filtrar_('aging')),
+    detalle: detalleMasAntiguos_(completo),
     generadoEn: Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
   };
 }

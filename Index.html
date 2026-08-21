@@ -547,8 +547,12 @@ function colorEstado(clave) {
     : css('--status-muted');
 }
 
-function graficaDona(porAging, total) {
+function graficaDona(porAging) {
   destruir('dona');
+  // El total se saca de porAging (no de kpis.total): desde que "por X" ignora su propio
+  // filtro (20 ago 2026), si hay un filtro de aging activo kpis.total ya no representa el
+  // universo que muestra esta dona — mezclarlos daría un % inconsistente con lo que se ve.
+  const total = porAging.reduce((s, b) => s + b.total, 0);
   const criticos = (porAging.find(b => b.clave === 'critico') || {}).total || 0;
   const pctCriticos = total ? Math.round(criticos / total * 1000) / 10 : null;
   document.getElementById('lista-aging').innerHTML = porAging.map(b =>
@@ -1150,7 +1154,7 @@ function pintar(d) {
   donVelocesMS.llenarOpciones(d.opciones.donVeloces);
 
   pintarKpis(d.kpis);
-  graficaDona(d.porAging, d.kpis.total);
+  graficaDona(d.porAging);
   graficaEtapa(d.porEtapa);
 
   ultimoMovimientoSerie.llenarDatos(d.porUltimoEvento);
