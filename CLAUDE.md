@@ -136,10 +136,12 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
     solo queda esa fila (nombre del mes + separador entre cada una). La agrupación asume que
     los datos del backend vienen ordenados por fecha (tramos de mes contiguos, sin huecos) —
     si eso cambia, `gruposPorMes` deja de servir.
-- **Backlog por cliente** / **Backlog por proveedor** / **Backlog por veloz**: tablas
-  ordenables (clic en encabezado), mismo desglose de aging que la etapa
+- **Backlog por cliente** / **Backlog por proveedor** (misma fila) y **Backlog por evento**
+  / **Backlog por veloz** (fila siguiente, en ese orden): tablas ordenables (clic en
+  encabezado), mismo desglose de aging que la etapa
   (`porCliente_`/`porProveedor_`/`porDonVeloz_` en `Code.gs`). "Backlog por veloz" se agregó
-  el 20 ago 2026 debajo de "Backlog por proveedor", a pedido del usuario.
+  el 20 ago 2026; el 21 ago se reubicó junto a "Backlog por evento" (antes era su propia
+  fila completa, debajo de cliente/proveedor).
 - **Backlog por evento**: tabla ordenable por el código crudo de 4 caracteres (sin pasar por
   el mapeo de `ETAPAS`), con la etapa resuelta como columna adicional — sirve como vista
   rápida de qué códigos caen en "Otro / sin clasificar" sin tener que abrir el editor de
