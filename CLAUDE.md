@@ -42,6 +42,14 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   esquema de columnas es muy similar (mismo modelo de folio/eventos de 99minutos).
 - `CONFIG.SPREADSHEET_ID`/`SHEET_NAME` están fijos en `Code.gs`; si el usuario mueve la hoja
   o le cambia el nombre, ajustar ahí.
+- La `BD` se llena a mano volcando un extracto de otra base de datos — no hay una integración
+  automática. Por eso el dashboard muestra un **aviso fijo arriba de todo** (`.aviso-rango`
+  en `Index.html`, agregado 21 ago 2026) con el rango sugerido para filtrar esa base de
+  origen ANTES de pegarla en la hoja: hoy − 3 meses hasta hoy, calculado en el navegador
+  (no en el backend) cada vez que se abre la página. **Es puramente informativo — no manda
+  ningún parámetro a `getBacklogData`, no filtra el dashboard.** A la derecha del mismo
+  aviso hay un link directo a la hoja de Google Sheets (URL fija, mismo spreadsheet ID que
+  `CONFIG.SPREADSHEET_ID`).
 
 ## Definiciones de negocio (decisiones del usuario, 13 ago 2026)
 - **Backlog** = folios cuyo `Último evento: Evento` (4 primeros caracteres) **no** es uno de

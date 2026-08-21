@@ -190,12 +190,33 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: none; background: var(--surface-1); border: 1px solid var(--status-critical);
   color: var(--status-critical); border-radius: 10px; padding: 12px 14px; margin-top: 12px;
 }
+
+.aviso-rango {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: rgba(255,160,0,.10); border: 1px solid var(--status-warning);
+  border-radius: 10px; padding: 10px 14px; margin: 14px 0; font-size: 12.5px;
+}
+.aviso-rango a {
+  flex: none; color: var(--brand-navy); font-weight: 600; text-decoration: none;
+  border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; background: var(--surface-1);
+  white-space: nowrap;
+}
+.aviso-rango a:hover { opacity: .85; }
+
 .oculto { display: none !important; }
 </style>
 </head>
 <body>
 <h1>Backlog — 99minutos</h1>
 <div class="subtitulo" id="actualizado">Cargando…</div>
+
+<div class="aviso-rango">
+  <span>⚠️ Antes de cargar datos nuevos en esta hoja, filtra la base de origen entre
+    <strong id="aviso-rango-fechas">…</strong> (últimos 3 meses) — esta franja es solo
+    informativa, no filtra el dashboard.</span>
+  <a href="https://docs.google.com/spreadsheets/d/1yt-vTk6oZWbX0uHbqhUOu9DahmaBgikArUz_QUIwx8Y/edit?gid=0#gid=0"
+     target="_blank" rel="noopener">Abrir Google Sheet ↗</a>
+</div>
 
 <div class="filtros">
   <div class="filtro"><label>Empresa</label>
@@ -1275,6 +1296,16 @@ document.querySelectorAll('.ver-tabla[data-tabla]').forEach(btn =>
 );
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', cargar);
+
+// Rango sugerido para filtrar la base de origen antes de volcarla a esta hoja — puramente
+// informativo, no toca `params` ni el backend; se calcula una sola vez con la fecha del
+// navegador (hoy − 3 meses hasta hoy), no con la del servidor.
+(function() {
+  const hoy = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth() - 3, hoy.getDate());
+  const iso = d => d.toISOString().slice(0, 10);
+  document.getElementById('aviso-rango-fechas').textContent = iso(desde) + ' al ' + iso(hoy);
+})();
 
 cargar();
 </script>
