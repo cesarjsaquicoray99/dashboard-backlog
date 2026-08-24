@@ -66,6 +66,10 @@ h1 { font-size: 18px; font-weight: 600; }
   border: none; border-radius: 6px; padding: 7px 16px; cursor: pointer;
 }
 .filtro button:hover { opacity: .9; }
+.filtro button.btn-secundario {
+  color: var(--text-secondary); background: var(--page); border: 1px solid var(--border);
+}
+.filtro button.btn-secundario:hover { opacity: 1; color: var(--text-primary); }
 
 .grid-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .inicio-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; align-items: start; margin-top: 12px; }
@@ -257,6 +261,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   <div class="filtro"><label>ETA desde</label><input type="date" id="f-eta-desde"></div>
   <div class="filtro"><label>ETA hasta</label><input type="date" id="f-eta-hasta"></div>
   <div class="filtro"><button id="btn-aplicar">Aplicar</button></div>
+  <div class="filtro"><button type="button" id="btn-limpiar-filtros" class="btn-secundario">Limpiar filtros</button></div>
 </div>
 
 <div class="chips-filtro oculto" id="chips-filtro"></div>
@@ -1259,6 +1264,7 @@ document.getElementById('lista-aging').addEventListener('click', function(e) {
 });
 
 document.getElementById('btn-aplicar').addEventListener('click', cargar);
+document.getElementById('btn-limpiar-filtros').addEventListener('click', limpiarFiltros);
 
 document.getElementById('t-detalle').addEventListener('click', function(e) {
   const th = e.target.closest('th[data-key]');

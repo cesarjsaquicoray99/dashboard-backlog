@@ -229,7 +229,10 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   chip por valor seleccionado** (no hay control de barra que los colapse) — cada chip se
   quita individual con `tipo: 'etapa:<clave>'`/`'evento:<codigo>'`/`'aging:<clave>'`. El
   rango de "Último movimiento" es un chip único (`tipo: 'ultimoMov'`), igual que el chip
-  "ETA" ya existente. "Limpiar todos" aparece si hay 2+ filtros activos en total.
+  "ETA" ya existente. "Limpiar todos" aparece si hay 2+ filtros activos en total (junto a
+  los chips) — además, desde el 21 ago 2026 hay un botón fijo **"Limpiar filtros"** en la
+  barra de filtros misma (`#btn-limpiar-filtros`, junto a "Aplicar"), que llama a la misma
+  `limpiarFiltros()` sin depender de que haya chips activos.
 - La fila activa se resalta (`.fila-filtrable.activa`) comparando contra el Set
   correspondiente (`activoSel.has(...)` en `pintarTablaAgrupada()`/`pintarTablaEtapa()`),
   no contra un valor único.
