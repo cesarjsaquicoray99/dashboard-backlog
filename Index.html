@@ -387,34 +387,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     (sin domingos ni feriados) — si ya pasó y el folio sigue sin llegar, aparece atrasado.
     Todo este módulo es independiente de los filtros de la barra superior — es un universo
     aparte, siempre completo.</div>
+  <button class="ver-tabla" id="btn-abrir-devoluciones" style="margin-bottom:12px;">Abrir Backlog de Devoluciones</button>
 
-  <div class="grid-kpis" id="kpis-dev"></div>
+  <div id="modulo-devoluciones" class="oculto">
+    <div class="grid-kpis" id="kpis-dev"></div>
 
-  <div class="inicio-grid">
-    <div class="card card-devoluciones">
-      <h2>Backlog de Devoluciones por Zona</h2>
-      <div class="nota">Folios de este módulo por zona, desglosados por estado de atraso. Clic en un encabezado para ordenar.</div>
-      <div class="plot-scroll"><div class="plot" id="plot-dev-zona"><canvas id="ch-dev-zona"></canvas></div></div>
-      <div class="leyenda" id="leyenda-dev-zona"></div>
-    </div>
-    <div class="card card-devoluciones">
-      <h2>Estado de atraso</h2>
-      <div class="nota">Folios de este módulo según si ya pasó su ETA de devolución.</div>
-      <div class="plot dona"><canvas id="ch-dev-atraso"></canvas></div>
-      <div id="lista-dev-atraso" class="leyenda"></div>
-    </div>
-  </div>
-
-  <div class="grid-cards una">
-    <div class="card card-devoluciones">
-      <div class="card-head">
-        <h2>Detalle</h2>
-        <div class="acciones"><span class="nota" style="margin:0;">
-          <strong><span id="devoluciones-total"></span></strong> folios,
-          <strong><span id="devoluciones-atrasados"></span></strong> atrasados</span></div>
+    <div class="inicio-grid">
+      <div class="card card-devoluciones">
+        <h2>Backlog de Devoluciones por Zona</h2>
+        <div class="nota">Folios de este módulo por zona, desglosados por estado de atraso. Clic en un encabezado para ordenar.</div>
+        <div class="plot-scroll"><div class="plot" id="plot-dev-zona"><canvas id="ch-dev-zona"></canvas></div></div>
+        <div class="leyenda" id="leyenda-dev-zona"></div>
       </div>
-      <div class="nota">Clic en un encabezado para ordenar.</div>
-      <div class="tabla-scroll" id="t-devoluciones"></div>
+      <div class="card card-devoluciones">
+        <h2>Estado de atraso</h2>
+        <div class="nota">Folios de este módulo según si ya pasó su ETA de devolución.</div>
+        <div class="plot dona"><canvas id="ch-dev-atraso"></canvas></div>
+        <div id="lista-dev-atraso" class="leyenda"></div>
+      </div>
+    </div>
+
+    <div class="grid-cards una">
+      <div class="card card-devoluciones">
+        <div class="card-head">
+          <h2>Detalle</h2>
+          <div class="acciones"><span class="nota" style="margin:0;">
+            <strong><span id="devoluciones-total"></span></strong> folios,
+            <strong><span id="devoluciones-atrasados"></span></strong> atrasados</span></div>
+        </div>
+        <div class="nota">Clic en un encabezado para ordenar.</div>
+        <div class="tabla-scroll" id="t-devoluciones"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1509,6 +1512,19 @@ document.getElementById('lista-aging').addEventListener('click', function(e) {
 
 document.getElementById('btn-aplicar').addEventListener('click', cargar);
 document.getElementById('btn-limpiar-filtros').addEventListener('click', limpiarFiltros);
+
+document.getElementById('btn-abrir-devoluciones').addEventListener('click', function() {
+  const el = document.getElementById('modulo-devoluciones');
+  const mostrar = el.classList.contains('oculto');
+  el.classList.toggle('oculto', !mostrar);
+  this.textContent = mostrar ? 'Ocultar Backlog de Devoluciones' : 'Abrir Backlog de Devoluciones';
+  // Los charts se crean con el módulo oculto (display:none mide 0), así que al abrir hay
+  // que forzarlos a recalcular su tamaño — si no, quedan en blanco aunque los datos estén bien.
+  if (mostrar) {
+    if (charts.devAtraso) charts.devAtraso.resize();
+    if (charts.devZona) charts.devZona.resize();
+  }
+});
 
 document.getElementById('t-detalle').addEventListener('click', function(e) {
   const th = e.target.closest('th[data-key]');

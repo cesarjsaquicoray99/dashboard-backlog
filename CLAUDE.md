@@ -212,6 +212,17 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   módulo lo calcula. Vive al final de la página, separado visualmente del resto
   (`.separador-modulo` + `.card-devoluciones`, borde `--brand-navy`) — a propósito, para que
   se lea como un reporte aparte y no como una tarjeta más del backlog general.
+- **Oculto detrás de un botón** (`#btn-abrir-devoluciones`, agregado 21 ago 2026 a pedido del
+  usuario — "módulo al que se entra haciendo clic en un botón"): el contenedor
+  `#modulo-devoluciones` (KPIs + los 2 gráficos + la tabla de detalle) arranca con la clase
+  `oculto` y el botón lo togglea, cambiando su propio texto entre "Abrir"/"Ocultar Backlog de
+  Devoluciones". **Los datos y los charts se calculan/crean en cada `cargar()` igual que
+  siempre, estén visibles o no** — no hay carga diferida. Por eso, al ABRIR el módulo, el
+  handler del botón fuerza `charts.devAtraso.resize()`/`charts.devZona.resize()`: Chart.js
+  mide 0×0 un canvas creado dentro de un contenedor `display:none`, así que sin ese resize
+  las gráficas quedarían en blanco la primera vez que se abre el módulo aunque los datos
+  estén bien. Si se agrega un tercer chart a este módulo, hay que sumarlo también a ese
+  resize.
 - **Folios que entran** (`backlogDevoluciones_` en `Code.gs`) — cualquiera de las dos
   condiciones (OR, decisión del usuario):
   - Etapa `en_camino_devolucion` (eventos `5001`/`5101`) — ya identificados como en camino
