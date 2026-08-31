@@ -37,6 +37,24 @@ const AGING_BUCKETS = [
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical', max: Infinity }
 ];
 
+// Buckets de atraso para "Backlog de Devoluciones" (agregado 21 ago 2026) — mismo estilo
+// que AGING_BUCKETS pero sobre `diasAtraso` (hoy − ETA de devolución), que puede ser
+// negativo (todavía no llega la fecha). `max` es el límite superior de cada bucket.
+const ATRASO_BUCKETS = [
+  { clave: 'en_plazo',        etiqueta: 'En plazo',            color: 'good',     max: -1 },
+  { clave: 'vence_hoy',       etiqueta: 'Vence hoy',           color: 'info',     max: 0 },
+  { clave: 'atrasado_leve',   etiqueta: 'Atrasado 1–5 días',   color: 'warning',  max: 5 },
+  { clave: 'atrasado_critico', etiqueta: 'Atrasado 6+ días',   color: 'critical', max: Infinity }
+];
+
+// null (sin ETA de devolución calculable) devuelve null — se maneja aparte como
+// "sin_calcular" en quien llame a esto, igual que "sin_aging" en porAging_.
+function bucketAtraso_(diasAtraso) {
+  if (diasAtraso == null) return null;
+  for (const b of ATRASO_BUCKETS) if (diasAtraso <= b.max) return b;
+  return ATRASO_BUCKETS[ATRASO_BUCKETS.length - 1];
+}
+
 // Candidatos de encabezado por campo lógico (solo los que usa este dashboard).
 // Comparación normalizada (minúsculas, sin acentos, espacios colapsados); primero
 // coincidencia exacta, luego "empieza con". Ajustar aquí si cambian los nombres en la hoja.
@@ -60,6 +78,9 @@ const HEADERS = {
 // mapa aparte de HEADERS porque es una hoja distinta, con sus propias columnas.
 const HEADERS_LT = {
   destinoZonificacion: ['Destino: Zonificación'],
+  departamento:        ['Departamento'],
+  provincia:           ['Provincia'],
+  distrito:            ['Distrito'],
   zona:                ['Zona'],
   lt:                  ['LT']
 };
@@ -178,14 +199,16 @@ function diasEntre_(fecha, hoy) {
   return Math.round((b - a) / 86400000);
 }
 
-// Mapa "Destino: Zonificación" → { zona, lt } leído de la hoja LT (agregada por el usuario
-// 21 ago 2026, columnas: Destino: Zonificación, Departamento, Provincia, Distrito, LT,
-// Zona). El folio no trae Zona ni LT directamente — se resuelven cruzando su propia columna
-// "Destino: Zonificación" contra esta tabla. `lt` es el lead time en días hábiles hasta ese
-// destino, usado por sumarDiasHabiles_ para "ETA de devolución". Si la hoja LT no existe
-// todavía, o no tiene las columnas esperadas, el cruce simplemente no aporta nada (folios
-// quedan con zona: '' y lt: null), no rompe el dashboard — ver debugZonas() para
-// diagnosticar códigos sin match.
+// Mapa "Destino: Zonificación" → { departamento, provincia, distrito, zona, lt } leído de
+// la hoja LT (agregada por el usuario 21 ago 2026, columnas: Destino: Zonificación,
+// Departamento, Provincia, Distrito, LT, Zona). El folio no trae ninguno de estos datos
+// directamente — se resuelven cruzando su propia columna "Destino: Zonificación" contra
+// esta tabla. `lt` es el lead time en días hábiles hasta ese destino, usado por
+// sumarDiasHabiles_ para "ETA de devolución"; departamento/provincia/distrito se muestran
+// en el detalle de "Backlog de Devoluciones" (agregados 21 ago 2026). Si la hoja LT no
+// existe todavía, o no tiene las columnas esperadas, el cruce simplemente no aporta nada
+// (folios quedan con estos campos vacíos/null), no rompe el dashboard — ver debugZonas()
+// para diagnosticar códigos sin match.
 function leerInfoLT_() {
   const hoja = abrirHojaPorNombre_(CONFIG.LT_SHEET_NAME);
   if (!hoja) return {};
@@ -203,6 +226,9 @@ function leerInfoLT_() {
     if (!destino) continue;
     const lt = Number(valores[i][cols.lt]);
     mapa[destino] = {
+      departamento: String(valores[i][cols.departamento] || '').trim(),
+      provincia: String(valores[i][cols.provincia] || '').trim(),
+      distrito: String(valores[i][cols.distrito] || '').trim(),
       zona: String(valores[i][cols.zona] || '').trim(),
       lt: isNaN(lt) ? null : lt
     };
@@ -285,6 +311,9 @@ function leerFolios_(infoLT) {
       entregaFallidaMotivo: String(fila[cols.entregaFallidaMotivo] || ''),
       entregaFallidaIntentos: isNaN(intentos) ? 0 : intentos,
       destinoZonificacion: destinoZonificacion,
+      departamento: info.departamento || '',
+      provincia: info.provincia || '',
+      distrito: info.distrito || '',
       zona: info.zona || '',
       lt: info.lt != null ? info.lt : null
     });
@@ -497,6 +526,9 @@ function backlogDevoluciones_(folios, hoy, feriados) {
         etapa: f.etapa.etiqueta,
         proveedor: f.proveedor,
         donVeloz: f.donVeloz,
+        departamento: f.departamento,
+        provincia: f.provincia,
+        distrito: f.distrito,
         zona: f.zona,
         lt: f.lt,
         eta: f.eta ? Utilities.formatDate(f.eta, Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
@@ -512,6 +544,43 @@ function backlogDevoluciones_(folios, hoy, feriados) {
       if (b.diasAtraso == null) return -1;
       return b.diasAtraso - a.diasAtraso;
     });
+}
+
+// Distribución del backlog de devoluciones por bucket de atraso (para la dona "Estado de
+// atraso") — mismo patrón que porAging_.
+function devolucionesPorAtraso_(devoluciones) {
+  const por = {};
+  ATRASO_BUCKETS.forEach(function(b) { por[b.clave] = 0; });
+  let sinCalcular = 0;
+  devoluciones.forEach(function(d) {
+    const b = bucketAtraso_(d.diasAtraso);
+    if (b) por[b.clave]++; else sinCalcular++;
+  });
+  const lista = ATRASO_BUCKETS.map(function(b) {
+    return { clave: b.clave, etiqueta: b.etiqueta, color: b.color, total: por[b.clave] };
+  });
+  if (sinCalcular) lista.push({ clave: 'sin_calcular', etiqueta: 'Sin ETA calculable', color: 'muted', total: sinCalcular });
+  return lista;
+}
+
+// Backlog de devoluciones agrupado por Zona, desglosado por bucket de atraso (para la
+// barra apilada "Backlog de Devoluciones por Zona") — mismo patrón que porEtapa_.
+function devolucionesPorZona_(devoluciones) {
+  const por = {};
+  devoluciones.forEach(function(d) {
+    const clave = d.zona || 'Sin zona';
+    if (!por[clave]) {
+      por[clave] = { zona: clave, sinCalcular: 0, total: 0 };
+      ATRASO_BUCKETS.forEach(function(b) { por[clave][b.clave] = 0; });
+    }
+    const b = por[clave];
+    b.total++;
+    const bucket = bucketAtraso_(d.diasAtraso);
+    if (!bucket) { b.sinCalcular++; return; }
+    b[bucket.clave]++;
+  });
+  return Object.keys(por).map(function(k) { return por[k]; })
+    .sort(function(a, b) { return b.total - a.total; });
 }
 
 function getBacklogData(params) {
@@ -590,6 +659,7 @@ function getBacklogData(params) {
   }
 
   const completo = filtrar_(null); // todos los filtros — para KPIs y el detalle de folios
+  const devoluciones = backlogDevoluciones_(enriquecidos, hoy, feriados);
 
   return {
     opciones: opciones,
@@ -607,8 +677,12 @@ function getBacklogData(params) {
     detalle: detalleMasAntiguos_(completo),
     // "Backlog de Devoluciones" usa `enriquecidos` (todo el backlog no-terminal), no
     // `completo` — es un módulo aparte, no debe encogerse si alguien filtra por
-    // empresa/proveedor/etc. arriba (ver comentario en backlogDevoluciones_).
-    devoluciones: backlogDevoluciones_(enriquecidos, hoy, feriados),
+    // empresa/proveedor/etc. arriba (ver comentario en backlogDevoluciones_). Las dos
+    // agregaciones (por atraso, por zona) se calculan sobre el resultado ya armado, no
+    // sobre `enriquecidos` de nuevo, para no repetir el cálculo de ETA de devolución.
+    devoluciones: devoluciones,
+    devolucionesPorAtraso: devolucionesPorAtraso_(devoluciones),
+    devolucionesPorZona: devolucionesPorZona_(devoluciones),
     generadoEn: Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
   };
 }

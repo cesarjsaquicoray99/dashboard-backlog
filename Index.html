@@ -380,18 +380,40 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     </div>
   </div>
 
-  <div class="separador-modulo"><span>Módulo aparte</span></div>
+  <div class="separador-modulo"><span>Módulo aparte — Backlog de Devoluciones</span></div>
+  <div class="nota" style="margin: -8px 0 12px;">Folios en camino de vuelta a Lima o con 2+
+    intentos fallidos de entrega (con 1 fallo hay algo por revisar; con 2+ el folio debe
+    volver a Lima). "ETA de devolución" = ETA de entrega + LT del destino, en días hábiles
+    (sin domingos ni feriados) — si ya pasó y el folio sigue sin llegar, aparece atrasado.
+    Todo este módulo es independiente de los filtros de la barra superior — es un universo
+    aparte, siempre completo.</div>
+
+  <div class="grid-kpis" id="kpis-dev"></div>
+
+  <div class="inicio-grid">
+    <div class="card card-devoluciones">
+      <h2>Backlog de Devoluciones por Zona</h2>
+      <div class="nota">Folios de este módulo por zona, desglosados por estado de atraso. Clic en un encabezado para ordenar.</div>
+      <div class="plot-scroll"><div class="plot" id="plot-dev-zona"><canvas id="ch-dev-zona"></canvas></div></div>
+      <div class="leyenda" id="leyenda-dev-zona"></div>
+    </div>
+    <div class="card card-devoluciones">
+      <h2>Estado de atraso</h2>
+      <div class="nota">Folios de este módulo según si ya pasó su ETA de devolución.</div>
+      <div class="plot dona"><canvas id="ch-dev-atraso"></canvas></div>
+      <div id="lista-dev-atraso" class="leyenda"></div>
+    </div>
+  </div>
+
   <div class="grid-cards una">
     <div class="card card-devoluciones">
-      <h2>Backlog de Devoluciones</h2>
-      <div class="nota">Folios en camino de vuelta a Lima o con 2+ intentos fallidos de entrega
-        (con 1 fallo hay algo por revisar; con 2+ el folio debe volver a Lima). "ETA de
-        devolución" = ETA de entrega + LT del destino, en días hábiles (sin domingos ni
-        feriados) — si ya pasó y el folio sigue sin llegar, aparece atrasado.
-        <strong><span id="devoluciones-total"></span></strong> folios en este backlog,
-        <strong><span id="devoluciones-atrasados"></span></strong> atrasados. No se ve
-        afectado por los filtros de la barra superior — es un universo aparte. Clic en un
-        encabezado para ordenar.</div>
+      <div class="card-head">
+        <h2>Detalle</h2>
+        <div class="acciones"><span class="nota" style="margin:0;">
+          <strong><span id="devoluciones-total"></span></strong> folios,
+          <strong><span id="devoluciones-atrasados"></span></strong> atrasados</span></div>
+      </div>
+      <div class="nota">Clic en un encabezado para ordenar.</div>
       <div class="tabla-scroll" id="t-devoluciones"></div>
     </div>
   </div>
@@ -408,6 +430,16 @@ const BUCKETS_AGING = [
   { clave: 'reciente', etiqueta: '1–2 días', color: 'good' },
   { clave: 'atencion', etiqueta: '3–5 días', color: 'warning' },
   { clave: 'critico',  etiqueta: '6+ días',  color: 'critical' }
+];
+
+// Espejo de ATRASO_BUCKETS (Code.gs) — mismo patrón que BUCKETS_AGING, para el módulo
+// aparte "Backlog de Devoluciones" (no se cruza con agingSel/BUCKETS_AGING, son cosas
+// distintas: uno mide antigüedad del backlog general, el otro atraso de devoluciones).
+const BUCKETS_ATRASO = [
+  { clave: 'en_plazo',         etiqueta: 'En plazo',          color: 'good' },
+  { clave: 'vence_hoy',        etiqueta: 'Vence hoy',         color: 'info' },
+  { clave: 'atrasado_leve',    etiqueta: 'Atrasado 1–5 días', color: 'warning' },
+  { clave: 'atrasado_critico', etiqueta: 'Atrasado 6+ días',  color: 'critical' }
 ];
 
 // 'sin_aging' no está en BUCKETS_AGING (no es un bucket de días, es "no tiene fecha de
@@ -997,9 +1029,11 @@ function chipIntentos_(n) {
 
 function pintarDevoluciones() {
   const cols = [
-    ['folio', 'Folio'], ['empresa', 'Empresa'], ['etapa', 'Etapa'], ['zona', 'Zona'],
-    ['lt', 'LT (días)', true], ['eta', 'ETA entrega'], ['etaDevolucion', 'ETA devolución'],
-    ['diasAtraso', 'Atraso', true], ['motivoFallo', 'Motivo de fallo'], ['intentos', 'Intentos', true]
+    ['folio', 'Folio'], ['empresa', 'Empresa'], ['etapa', 'Etapa'],
+    ['departamento', 'Departamento'], ['provincia', 'Provincia'], ['distrito', 'Distrito'],
+    ['zona', 'Zona'], ['lt', 'LT (días)', true], ['eta', 'ETA entrega'],
+    ['etaDevolucion', 'ETA devolución'], ['diasAtraso', 'Atraso', true],
+    ['motivoFallo', 'Motivo de fallo'], ['intentos', 'Intentos', true]
   ];
   const lista = ordenar(datosDevoluciones, sortDevoluciones);
   document.getElementById('devoluciones-total').textContent = datosDevoluciones.length;
@@ -1011,6 +1045,9 @@ function pintarDevoluciones() {
       '<td>' + d.folio + '</td>' +
       '<td>' + d.empresa + '</td>' +
       '<td>' + d.etapa + '</td>' +
+      '<td>' + (d.departamento || '–') + '</td>' +
+      '<td>' + (d.provincia || '–') + '</td>' +
+      '<td>' + (d.distrito || '–') + '</td>' +
       '<td>' + (d.zona || '–') + '</td>' +
       '<td class="num">' + fmt(d.lt) + '</td>' +
       '<td>' + (d.eta || '–') + '</td>' +
@@ -1020,6 +1057,104 @@ function pintarDevoluciones() {
       '<td class="num">' + chipIntentos_(d.intentos) + '</td>' +
       '</tr>').join('') +
     '</tbody></table>';
+}
+
+function pintarKpisDevoluciones(devoluciones) {
+  const total = devoluciones.length;
+  const atrasados = devoluciones.filter(d => d.diasAtraso != null && d.diasAtraso > 0);
+  const pctAtrasados = total ? Math.round(atrasados.length / total * 1000) / 10 : null;
+  const promedioAtraso = atrasados.length
+    ? Math.round(atrasados.reduce((s, d) => s + d.diasAtraso, 0) / atrasados.length * 10) / 10
+    : null;
+  const debeVolver = devoluciones.filter(d => d.intentos >= 2).length;
+  const tiles = [
+    ['Backlog de devoluciones', total, 'folios en este módulo'],
+    ['Atrasados', atrasados.length, fmt(pctAtrasados, '%') + ' del total', atrasados.length > 0 ? 'critico' : ''],
+    ['Atraso promedio', fmt(promedioAtraso, ' días'), 'entre los atrasados'],
+    ['Debe volver a Lima', debeVolver, '2+ intentos fallidos']
+  ];
+  document.getElementById('kpis-dev').innerHTML = tiles.map(t =>
+    '<div class="tile"><div class="etiqueta">' + t[0] + '</div>' +
+    '<div class="valor' + (t[3] ? ' ' + t[3] : '') + '">' + t[1] + '</div>' +
+    '<div class="detalle">' + t[2] + '</div></div>'
+  ).join('');
+}
+
+function graficaDevolucionesAtraso(porAtraso) {
+  destruir('devAtraso');
+  const total = porAtraso.reduce((s, b) => s + b.total, 0);
+  const atrasados = porAtraso
+    .filter(b => b.clave === 'atrasado_leve' || b.clave === 'atrasado_critico')
+    .reduce((s, b) => s + b.total, 0);
+  const pct = total ? Math.round(atrasados / total * 1000) / 10 : null;
+  document.getElementById('lista-dev-atraso').innerHTML = porAtraso.map(b =>
+    '<span><span class="punto" style="background:' + colorEstado(b.color) + '"></span>' +
+    b.etiqueta + ': <strong>' + b.total + '</strong></span>').join('');
+  charts.devAtraso = new Chart(document.getElementById('ch-dev-atraso'), {
+    type: 'doughnut',
+    data: {
+      labels: porAtraso.map(b => b.etiqueta),
+      datasets: [{
+        data: porAtraso.map(b => b.total),
+        backgroundColor: porAtraso.map(b => colorEstado(b.color)),
+        borderColor: css('--surface-1'), borderWidth: 2, hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        textoCentro: { valor: fmt(pct, '%'), sub: 'atrasados' },
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: css('--surface-1'), titleColor: css('--text-primary'),
+          bodyColor: css('--text-secondary'), borderColor: css('--border'),
+          borderWidth: 1, padding: 10, cornerRadius: 8, displayColors: true,
+          boxWidth: 8, boxHeight: 8, boxPadding: 4, usePointStyle: true,
+          callbacks: {
+            label: c => ' ' + c.parsed + ' folios (' +
+              (total ? Math.round(c.parsed / total * 1000) / 10 : 0) + '%)'
+          }
+        }
+      }
+    }
+  });
+}
+
+function graficaDevolucionesZona(porZona) {
+  destruir('devZona');
+  const conSinCalcular = porZona.some(z => z.sinCalcular > 0);
+  document.getElementById('leyenda-dev-zona').innerHTML =
+    BUCKETS_ATRASO.map(b => '<span><span class="punto" style="background:' + colorEstado(b.color) +
+      '"></span>' + b.etiqueta + '</span>').join('') +
+    (conSinCalcular ? '<span><span class="punto" style="background:' + css('--status-muted') +
+      '"></span>Sin ETA calculable</span>' : '');
+  const plot = document.getElementById('plot-dev-zona');
+  plot.style.height = Math.max(160, porZona.length * 48 + 40) + 'px';
+  const opts = baseOpts();
+  opts.indexAxis = 'y';
+  opts.plugins.etiquetaTotalBarra = true;
+  opts.scales = {
+    x: { stacked: true, grid: { color: css('--grid'), lineWidth: 1 }, border: { display: false },
+         beginAtZero: true, grace: '12%', ticks: { precision: 0 } },
+    y: { stacked: true, grid: { display: false }, border: { color: css('--baseline') },
+         ticks: { color: css('--text-secondary'), autoSkip: false } }
+  };
+  opts.plugins.tooltip.callbacks = {
+    footer: c => c.length ? porZona[c[0].dataIndex].total + ' folios en total' : ''
+  };
+  const datasets = BUCKETS_ATRASO.map(function(b) {
+    return { label: b.etiqueta, data: porZona.map(z => z[b.clave]),
+      backgroundColor: colorEstado(b.color), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' };
+  });
+  if (conSinCalcular) {
+    datasets.push({ label: 'Sin ETA calculable', data: porZona.map(z => z.sinCalcular),
+      backgroundColor: css('--status-muted'), maxBarThickness: 22, borderRadius: 3, borderSkipped: 'start' });
+  }
+  charts.devZona = new Chart(document.getElementById('ch-dev-zona'), {
+    type: 'bar',
+    data: { labels: porZona.map(z => z.zona), datasets: datasets },
+    options: opts
+  });
 }
 
 // ── Tablas agrupadas con desglose de aging (proveedor / cliente / evento) ──
@@ -1278,6 +1413,9 @@ function pintar(d) {
 
   datosDevoluciones = d.devoluciones;
   pintarDevoluciones();
+  pintarKpisDevoluciones(d.devoluciones);
+  graficaDevolucionesAtraso(d.devolucionesPorAtraso);
+  graficaDevolucionesZona(d.devolucionesPorZona);
 
   renderChips();
 

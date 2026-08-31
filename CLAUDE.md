@@ -244,6 +244,28 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
 - **Diagnóstico**: `debugDevoluciones()` en el editor de Apps Script — cuántos folios entran
   por cada condición, cuántos quedaron sin ETA de devolución calculable, y cuántos feriados
   se cargaron (para confirmar que la hoja `Feriados` se está leyendo).
+- **Ampliado a sección completa el mismo 21 ago 2026** (a pedido del usuario — "otro módulo
+  aparte, con gráficos y todo"; antes era solo una tarjeta con la tabla de detalle):
+  - **KPI tiles** (`#kpis-dev`, `pintarKpisDevoluciones()`): Backlog de devoluciones (total),
+    Atrasados (count + % del total), Atraso promedio (solo entre los atrasados, no cuenta los
+    "en plazo"), Debe volver a Lima (folios con 2+ intentos). Reusa `.tile`/`.valor.critico`
+    del backlog general, mismo look.
+  - **"Backlog de Devoluciones por Zona"**: barra horizontal apilada por Zona × bucket de
+    atraso (`devolucionesPorZona_` en `Code.gs`, `graficaDevolucionesZona()` en
+    `Index.html`) — mismo patrón visual que "Backlog por etapa" del dashboard general.
+  - **"Estado de atraso"**: dona con la distribución por `ATRASO_BUCKETS`
+    (`devolucionesPorAtraso_`, `graficaDevolucionesAtraso()`) — mismo patrón que la dona de
+    antigüedad general, pero **sin clic-a-filtrar**: a propósito no se conectó con
+    `agingSel`/`alternarAging` (son conceptos distintos — antigüedad del backlog general vs.
+    atraso de devolución — mezclarlos habría sido confuso) ni con el sistema de filtros de
+    la barra superior (este módulo no lo usa).
+  - **`ATRASO_BUCKETS`** (`Code.gs`) / **`BUCKETS_ATRASO`** (`Index.html`, espejo solo para
+    render) son la versión de `AGING_BUCKETS`/`BUCKETS_AGING` pero sobre `diasAtraso`: en
+    plazo (verde) · vence hoy (azul info) · atrasado 1–5 días (ámbar) · atrasado 6+ días
+    (rojo) · sin ETA calculable (gris, aparte de los 4 buckets, solo si hay folios así).
+  - La tabla de detalle ahora también trae **Departamento, Provincia, Distrito** (cruzados
+    desde la hoja `LT`, mismo `leerInfoLT_()` que ya traía Zona/LT — se amplió el mapa en vez
+    de crear un cruce aparte).
 
 ## Filas/gráficas como filtro (cross-filter, multi-selección desde el 20 ago 2026)
 - Clic en una fila de **Cliente**, **Proveedor**, **Don Veloz**, **Evento** o **Etapa** suma
