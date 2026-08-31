@@ -257,6 +257,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       </div>
     </div>
   </div>
+  <div class="filtro"><label>Zona</label><select id="f-zona"><option value="">Todas</option></select></div>
   <div class="filtro filtro-check">
     <input type="checkbox" id="f-no-intentado">
     <label for="f-no-intentado" title="Sin fecha de 1er evento de entrega fallida ni de entrega confirmada">No intentados</label>
@@ -1151,6 +1152,7 @@ function cargar() {
   const params = {
     empresas: empresasMS.sel.size ? Array.from(empresasMS.sel) : null,
     tipoEnvio: document.getElementById('f-tipo').value || null,
+    zona: document.getElementById('f-zona').value || null,
     proveedores: proveedoresMS.sel.size ? Array.from(proveedoresMS.sel) : null,
     donVeloces: donVelocesMS.sel.size ? Array.from(donVelocesMS.sel) : null,
     noIntentado: document.getElementById('f-no-intentado').checked || null,
@@ -1179,6 +1181,7 @@ function cargar() {
 function pintar(d) {
   empresasMS.llenarOpciones(d.opciones.empresas);
   llenarSelect('f-tipo', d.opciones.tiposEnvio, document.getElementById('f-tipo').value);
+  llenarSelect('f-zona', d.opciones.zonas, document.getElementById('f-zona').value);
   proveedoresMS.llenarOpciones(d.opciones.proveedores);
   donVelocesMS.llenarOpciones(d.opciones.donVeloces);
 
@@ -1218,6 +1221,8 @@ function chipsActivos() {
   }
   const tipo = document.getElementById('f-tipo').value;
   if (tipo) chips.push({ tipo: 'tipo', etiqueta: 'Tipo de envío: ' + tipo });
+  const zona = document.getElementById('f-zona').value;
+  if (zona) chips.push({ tipo: 'zona', etiqueta: 'Zona: ' + zona });
   if (proveedoresMS.sel.size) {
     chips.push({ tipo: 'proveedores',
       etiqueta: 'Proveedor: ' + (proveedoresMS.sel.size === 1 ? Array.from(proveedoresMS.sel)[0] : proveedoresMS.sel.size + ' seleccionados') });
@@ -1250,6 +1255,7 @@ function renderChips() {
 function quitarFiltro(tipo) {
   if (tipo === 'empresas') empresasMS.limpiar();
   else if (tipo === 'tipo') document.getElementById('f-tipo').value = '';
+  else if (tipo === 'zona') document.getElementById('f-zona').value = '';
   else if (tipo === 'proveedores') proveedoresMS.limpiar();
   else if (tipo === 'donveloces') donVelocesMS.limpiar();
   else if (tipo === 'noIntentado') document.getElementById('f-no-intentado').checked = false;
@@ -1264,6 +1270,7 @@ function quitarFiltro(tipo) {
 function limpiarFiltros() {
   empresasMS.limpiar();
   document.getElementById('f-tipo').value = '';
+  document.getElementById('f-zona').value = '';
   proveedoresMS.limpiar();
   donVelocesMS.limpiar();
   document.getElementById('f-no-intentado').checked = false;

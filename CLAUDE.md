@@ -50,6 +50,27 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   ningún parámetro a `getBacklogData`, no filtra el dashboard.** A la derecha del mismo
   aviso hay un link directo a la hoja de Google Sheets (URL fija, mismo spreadsheet ID que
   `CONFIG.SPREADSHEET_ID`).
+- **Hoja `LT`** (agregada por el usuario 21 ago 2026, mismo spreadsheet): cruce de
+  zonificación, columnas `Destino: Zonificación, Departamento, Provincia, Distrito, LT, Zona`
+  — un valor de "Destino: Zonificación" puede ser un nombre de distrito de Lima/Callao (ej.
+  "CARABAYLLO") o un código tipo UBIGEO para provincia (ej. "030101"); la columna `Zona` en
+  esa misma fila resuelve a qué zona pertenece ("Lima y Callao", "Provincia", quizás más).
+  `CONFIG.LT_SHEET_NAME`, encabezados propios en `HEADERS_LT` (no comparte `HEADERS` con la
+  `BD` porque es otra hoja). `leerZonasPorDestino_()` la lee entera y arma un mapa
+  destino→zona; si la hoja no existe o no tiene esas columnas, devuelve `{}` sin romper el
+  dashboard (los folios quedan con `zona: ''`, invisibles para el filtro de Zona pero no
+  causan error). **Riesgo de dato conocido, sin confirmar todavía**: si Google Sheets guarda
+  algún código de "Destino: Zonificación" como número en vez de texto (ej. "030101" → 30101,
+  perdiendo el cero inicial), el cruce con la `BD` fallaría para esas filas aunque coincidan
+  visualmente — correr `debugZonas()` desde el editor tras la primera carga real para ver
+  cuántos códigos quedaron sin Zona (`destinosSinZona`) y confirmar si es esto.
+- **Hoja `Feriados`** (agregada por el usuario 21 ago 2026, mismo spreadsheet, columnas
+  `country, day, month, year, description, Fecha`): **todavía no se usa en ningún cálculo**
+  del dashboard — el usuario la mencionó junto con `LT` pero el pedido que se implementó ese
+  día fue solo el filtro de Zona (cruce con `LT`). Si se necesita más adelante (ej. excluir
+  feriados del cálculo de "días sin avance" en `diasEntre_`), confirmar el alcance con el
+  usuario antes de tocar `bucketAging_`/`diasEntre_` — cambiar cómo se cuentan los días
+  afecta directamente los KPIs y los 4 buckets de aging que ya están validados.
 
 ## Definiciones de negocio (decisiones del usuario, 13 ago 2026)
 - **Backlog** = folios cuyo `Último evento: Evento` (4 primeros caracteres) **no** es uno de
@@ -80,9 +101,17 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   `Último evento: Proveedor`/`Nombre Don Veloz`, es decir quién tiene el folio *ahora*, no
   quién lo tuvo en un evento anterior), **No intentados** (agregado 20 ago 2026: folios sin
   fecha de 1er evento en `Entrega fallida` NI en `Entrega confirmada` — checkbox, no
-  multiselect), y rango de `ETA Cliente: Fecha` (opcional — a diferencia de
-  `monitoreo_entregas`, folios sin ETA **no se excluyen** salvo que el filtro de fecha esté
-  activo).
+  multiselect), **Zona** (agregado 21 ago 2026: `<select>` simple, no multiselect — cardinalidad
+  baja, esperada "Lima y Callao"/"Provincia" y poco más; resuelta cruzando `Destino:
+  Zonificación` del folio contra la hoja `LT`, ver "Fuente de datos" arriba — sin tabla de
+  desglose "Backlog por zona" propia, solo filtra, no se pidió una vista nueva), y rango de
+  `ETA Cliente: Fecha` (opcional — a diferencia de `monitoreo_entregas`, folios sin ETA **no
+  se excluyen** salvo que el filtro de fecha esté activo).
+- **Los filtros originales de la barra siempre quedan visibles** (pedido explícito del
+  usuario, 21 ago 2026, al agregar Zona) — no se colapsan detrás de un "más filtros"; nuevas
+  dimensiones se agregan como un `.filtro` más dentro de la misma `.filtros` (que ya tiene
+  `flex-wrap: wrap`, así que si no entran en una fila pasan a la siguiente, pero nunca se
+  ocultan).
 
 ## Vistas del dashboard
 - KPI tiles en su propia fila completa (4 columnas: total, % crítico, promedio de días, sin

@@ -1,6 +1,7 @@
 const CONFIG = {
   SPREADSHEET_ID: '1yt-vTk6oZWbX0uHbqhUOu9DahmaBgikArUz_QUIwx8Y', // "Backlog - PE"
   SHEET_NAME: 'BD',
+  LT_SHEET_NAME: 'LT', // hoja de cruce Destino: Zonificación → Zona, agregada 21 ago 2026
   HEADER_ROW: 1
 };
 
@@ -48,7 +49,15 @@ const HEADERS = {
   donVeloz:          ['Último evento: Nombre Don Veloz'],
   proveedor:         ['Último evento: Proveedor'],
   entregaFallidaFecha:    ['Entrega fallida: Fecha (1er evento)'],
-  entregaConfirmadaFecha: ['Entrega confirmada: Fecha (1er evento)']
+  entregaConfirmadaFecha: ['Entrega confirmada: Fecha (1er evento)'],
+  destinoZonificacion:    ['Destino: Zonificación']
+};
+
+// Encabezados de la hoja LT (cruce de zonificación, agregada por el usuario 21 ago 2026) —
+// mapa aparte de HEADERS porque es una hoja distinta, con sus propias columnas.
+const HEADERS_LT = {
+  destinoZonificacion: ['Destino: Zonificación'],
+  zona:                ['Zona']
 };
 
 function doGet() {
@@ -66,13 +75,16 @@ function normalizar_(s) {
     .trim();
 }
 
-function resolverColumnas_(filaEncabezados) {
+// `headers` es opcional (default HEADERS, la hoja BD) — se le pasa HEADERS_LT para
+// resolver los encabezados de la hoja LT con la misma lógica de coincidencia.
+function resolverColumnas_(filaEncabezados, headers) {
+  headers = headers || HEADERS;
   const normalizados = filaEncabezados.map(normalizar_);
   const cols = {};
   const faltantes = [];
-  Object.keys(HEADERS).forEach(function(clave) {
+  Object.keys(headers).forEach(function(clave) {
     let idx = -1;
-    for (const candidato of HEADERS[clave]) {
+    for (const candidato of headers[clave]) {
       const n = normalizar_(candidato);
       idx = normalizados.indexOf(n);
       if (idx === -1) idx = normalizados.findIndex(function(h) { return h.indexOf(n) === 0; });
@@ -88,11 +100,15 @@ function resolverColumnas_(filaEncabezados) {
   return cols;
 }
 
-function abrirHoja_() {
+function abrirHojaPorNombre_(nombre) {
   const ss = CONFIG.SPREADSHEET_ID
     ? SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID)
     : SpreadsheetApp.getActiveSpreadsheet();
-  const hoja = ss.getSheetByName(CONFIG.SHEET_NAME);
+  return ss.getSheetByName(nombre);
+}
+
+function abrirHoja_() {
+  const hoja = abrirHojaPorNombre_(CONFIG.SHEET_NAME);
   if (!hoja) throw new Error('No existe la hoja "' + CONFIG.SHEET_NAME + '" en el spreadsheet.');
   return hoja;
 }
@@ -150,7 +166,34 @@ function diasEntre_(fecha, hoy) {
   return Math.round((b - a) / 86400000);
 }
 
-function leerFolios_() {
+// Mapa "Destino: Zonificación" → "Zona" leído de la hoja LT (agregada por el usuario 21 ago
+// 2026, columnas: Destino: Zonificación, Departamento, Provincia, Distrito, LT, Zona). El
+// folio no trae la Zona directamente — se resuelve cruzando su propia columna "Destino:
+// Zonificación" contra esta tabla. Si la hoja LT no existe todavía, o no tiene las columnas
+// esperadas, el cruce simplemente no aporta zonas (folios quedan con zona: ''), no rompe el
+// dashboard — ver debugZonas() para diagnosticar códigos sin match.
+function leerZonasPorDestino_() {
+  const hoja = abrirHojaPorNombre_(CONFIG.LT_SHEET_NAME);
+  if (!hoja) return {};
+  const valores = hoja.getDataRange().getValues();
+  if (valores.length < 2) return {};
+  let cols;
+  try {
+    cols = resolverColumnas_(valores[0], HEADERS_LT);
+  } catch (e) {
+    return {};
+  }
+  const mapa = {};
+  for (let i = 1; i < valores.length; i++) {
+    const destino = String(valores[i][cols.destinoZonificacion] || '').trim();
+    if (!destino) continue;
+    mapa[destino] = String(valores[i][cols.zona] || '').trim();
+  }
+  return mapa;
+}
+
+function leerFolios_(zonasPorDestino) {
+  zonasPorDestino = zonasPorDestino || {};
   const hoja = abrirHoja_();
   const valores = hoja.getDataRange().getValues();
   const cols = resolverColumnas_(valores[CONFIG.HEADER_ROW - 1]);
@@ -158,6 +201,7 @@ function leerFolios_() {
   for (let i = CONFIG.HEADER_ROW; i < valores.length; i++) {
     const fila = valores[i];
     if (fila[cols.folio] === '' || fila[cols.folio] == null) continue;
+    const destinoZonificacion = String(fila[cols.destinoZonificacion] || '').trim();
     folios.push({
       folio: String(fila[cols.folio]),
       empresa: String(fila[cols.empresa] || 'Sin empresa'),
@@ -170,7 +214,9 @@ function leerFolios_() {
       // "No intentados" (decisión del usuario, 20 ago 2026): ni la entrega fallida ni la
       // confirmada tienen fecha de primer evento — al folio no se le intentó entregar aún.
       noIntentado: comoFecha_(fila[cols.entregaFallidaFecha]) == null &&
-        comoFecha_(fila[cols.entregaConfirmadaFecha]) == null
+        comoFecha_(fila[cols.entregaConfirmadaFecha]) == null,
+      destinoZonificacion: destinoZonificacion,
+      zona: zonasPorDestino[destinoZonificacion] || ''
     });
   }
   return folios;
@@ -355,14 +401,16 @@ function detalleMasAntiguos_(folios) {
 function getBacklogData(params) {
   params = params || {};
   const hoy = new Date();
-  const todos = leerFolios_();
+  const zonasPorDestino = leerZonasPorDestino_();
+  const todos = leerFolios_(zonasPorDestino);
   const enBacklog = todos.filter(function(f) { return esBacklog_(f.ultimoEvento); });
 
   const opciones = {
     empresas: listaUnica_(enBacklog, 'empresa'),
     tiposEnvio: listaUnica_(enBacklog, 'tipoEnvio'),
     proveedores: listaUnica_(enBacklog, 'proveedor').filter(function(p) { return p !== ''; }),
-    donVeloces: listaUnica_(enBacklog, 'donVeloz').filter(function(p) { return p !== ''; })
+    donVeloces: listaUnica_(enBacklog, 'donVeloz').filter(function(p) { return p !== ''; }),
+    zonas: listaUnica_(enBacklog, 'zona').filter(function(z) { return z !== ''; })
   };
 
   // Enriquecido ANTES de filtrar: etapa/dias/aging no dependen de ningún filtro, solo de
@@ -398,6 +446,7 @@ function getBacklogData(params) {
       if (excluir !== 'empresas' && params.empresas && params.empresas.length &&
           params.empresas.indexOf(f.empresa) === -1) return false;
       if (params.tipoEnvio && f.tipoEnvio !== params.tipoEnvio) return false;
+      if (params.zona && f.zona !== params.zona) return false;
       if (excluir !== 'proveedores' && params.proveedores && params.proveedores.length &&
           params.proveedores.indexOf(f.proveedor) === -1) return false;
       if (excluir !== 'donVeloces' && params.donVeloces && params.donVeloces.length &&
@@ -482,4 +531,27 @@ function debugMuestra() {
   const folios = leerFolios_();
   Logger.log('Total folios en hoja: %s', folios.length);
   Logger.log(JSON.stringify(folios.slice(0, 3), null, 2));
+}
+
+// Diagnóstico del cruce con la hoja LT: cuántos códigos de "Destino: Zonificación" del
+// backlog no matchearon ninguna fila de LT (por ende, quedaron sin Zona). Ejecutar desde el
+// editor de Apps Script tras la primera corrida real con las hojas LT/Feriados ya creadas.
+function debugZonas() {
+  const zonasPorDestino = leerZonasPorDestino_();
+  const todos = leerFolios_(zonasPorDestino);
+  const enBacklog = todos.filter(function(f) { return esBacklog_(f.ultimoEvento); });
+  const sinZona = {};
+  enBacklog.forEach(function(f) {
+    if (f.zona) return;
+    const clave = f.destinoZonificacion || '(vacío)';
+    sinZona[clave] = (sinZona[clave] || 0) + 1;
+  });
+  const info = {
+    filasEnLT: Object.keys(zonasPorDestino).length,
+    totalBacklog: enBacklog.length,
+    sinZona: enBacklog.length - enBacklog.filter(function(f) { return f.zona; }).length,
+    destinosSinZona: Object.keys(sinZona).map(function(d) { return d + ' (x' + sinZona[d] + ')'; })
+  };
+  Logger.log(JSON.stringify(info, null, 2));
+  return info;
 }
