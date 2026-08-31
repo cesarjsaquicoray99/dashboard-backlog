@@ -56,21 +56,26 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   "CARABAYLLO") o un código tipo UBIGEO para provincia (ej. "030101"); la columna `Zona` en
   esa misma fila resuelve a qué zona pertenece ("Lima y Callao", "Provincia", quizás más).
   `CONFIG.LT_SHEET_NAME`, encabezados propios en `HEADERS_LT` (no comparte `HEADERS` con la
-  `BD` porque es otra hoja). `leerZonasPorDestino_()` la lee entera y arma un mapa
-  destino→zona; si la hoja no existe o no tiene esas columnas, devuelve `{}` sin romper el
-  dashboard (los folios quedan con `zona: ''`, invisibles para el filtro de Zona pero no
-  causan error). **Riesgo de dato conocido, sin confirmar todavía**: si Google Sheets guarda
-  algún código de "Destino: Zonificación" como número en vez de texto (ej. "030101" → 30101,
-  perdiendo el cero inicial), el cruce con la `BD` fallaría para esas filas aunque coincidan
-  visualmente — correr `debugZonas()` desde el editor tras la primera carga real para ver
-  cuántos códigos quedaron sin Zona (`destinosSinZona`) y confirmar si es esto.
+  `BD` porque es otra hoja). `leerInfoLT_()` (hasta el 21 ago se llamaba `leerZonasPorDestino_`
+  y solo traía Zona; se amplió el mismo día para traer también `LT`, el lead time en días
+  hábiles hasta ese destino — ver "Backlog de Devoluciones" abajo) la lee entera y arma un
+  mapa destino → `{ zona, lt }`; si la hoja no existe o no tiene esas columnas, devuelve `{}`
+  sin romper el dashboard (los folios quedan con `zona: ''`/`lt: null`, invisibles para el
+  filtro de Zona y sin ETA de devolución calculable, pero no causan error). **Riesgo de dato
+  conocido, sin confirmar todavía**: si Google Sheets guarda algún código de "Destino:
+  Zonificación" como número en vez de texto (ej. "030101" → 30101, perdiendo el cero
+  inicial), el cruce con la `BD` fallaría para esas filas aunque coincidan visualmente —
+  correr `debugZonas()` desde el editor tras la primera carga real para ver cuántos códigos
+  quedaron sin Zona (`destinosSinZona`) y confirmar si es esto.
 - **Hoja `Feriados`** (agregada por el usuario 21 ago 2026, mismo spreadsheet, columnas
-  `country, day, month, year, description, Fecha`): **todavía no se usa en ningún cálculo**
-  del dashboard — el usuario la mencionó junto con `LT` pero el pedido que se implementó ese
-  día fue solo el filtro de Zona (cruce con `LT`). Si se necesita más adelante (ej. excluir
-  feriados del cálculo de "días sin avance" en `diasEntre_`), confirmar el alcance con el
-  usuario antes de tocar `bucketAging_`/`diasEntre_` — cambiar cómo se cuentan los días
-  afecta directamente los KPIs y los 4 buckets de aging que ya están validados.
+  `country, day, month, year, description, Fecha`): usada desde el 21 ago 2026 en el cálculo
+  de "ETA de devolución" del módulo **Backlog de Devoluciones** (ver abajo) — `leerFeriados_()`
+  la lee filtrando `country = 'PER'` y arma un Set de fechas ('yyyy-MM-dd') que
+  `sumarDiasHabiles_()` trata igual que un domingo (no cuenta como día hábil). Si la hoja no
+  existe, el Set queda vacío — ningún día se excluye por feriado, pero el cálculo no se
+  rompe. **No se usa para nada más** (los 4 buckets de aging / "días sin avance" del backlog
+  general siguen contando por calendario, sin excluir feriados — no se tocó `diasEntre_` ni
+  `bucketAging_`, sería un cambio de alcance distinto que habría que confirmar aparte).
 
 ## Definiciones de negocio (decisiones del usuario, 13 ago 2026)
 - **Backlog** = folios cuyo `Último evento: Evento` (4 primeros caracteres) **no** es uno de
@@ -200,6 +205,45 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   (Empresa, Proveedor, Total, etc.) sigue **ordenando**, como siempre. Si se agrega una
   columna nueva con una clave que coincida con un bucket de `BUCKETS_AGING` (o `'sinAging'`)
   en una tabla donde eso NO debería filtrar, hay que ajustar `claveAgingColumna_()`.
+
+## Backlog de Devoluciones (módulo aparte, agregado 21 ago 2026)
+- **Por qué existe**: a veces no queda claro cuándo un folio ya debió haber vuelto al
+  almacén de Lima — no hay un evento que avise "esto está atrasado para devolución". Este
+  módulo lo calcula. Vive al final de la página, separado visualmente del resto
+  (`.separador-modulo` + `.card-devoluciones`, borde `--brand-navy`) — a propósito, para que
+  se lea como un reporte aparte y no como una tarjeta más del backlog general.
+- **Folios que entran** (`backlogDevoluciones_` en `Code.gs`) — cualquiera de las dos
+  condiciones (OR, decisión del usuario):
+  - Etapa `en_camino_devolucion` (eventos `5001`/`5101`) — ya identificados como en camino
+    de vuelta.
+  - `Entrega fallida: Intentos` ≥ 2 — regla del usuario: **1 fallo** = hay algo por revisar
+    (todavía no necesariamente vuelve a Lima); **2+ fallos** = el folio debe volver a Lima,
+    aunque el evento en la hoja todavía no lo refleje.
+- **"ETA de devolución"** = `ETA Cliente: Fecha` (ETA de entrega) + `LT` del destino (de la
+  hoja `LT`, cruzado por `Destino: Zonificación`), contando solo **días hábiles**: sin
+  domingos ni fechas de la hoja `Feriados` (`sumarDiasHabiles_()` en `Code.gs`). **Supuesto
+  sin confirmar con el usuario**: el conteo empieza el día SIGUIENTE a la ETA de entrega (no
+  cuenta ese mismo día como hábil) — si la regla real es otra (ej. contar desde el mismo día
+  de la ETA), ajustar `sumarDiasHabiles_()`. Si falta la ETA de entrega o no hubo match de
+  `LT` en la hoja `LT`, el folio aparece igual pero sin poder calcular el atraso (columna
+  "Sin ETA calculable").
+- **Ordenado por días de atraso** (hoy − ETA de devolución) **descendente**, más atrasado
+  primero (decisión del usuario) — los que no se pueden calcular quedan al final, no se
+  mezclan con los que sí están en plazo. Chips de color: rojo "Atrasado Nd" si ya pasó,
+  ámbar "Vence hoy", verde "Faltan Nd" si todavía no llega la fecha, gris "Sin ETA
+  calculable".
+- **Columna de fallos**: motivo (`Entrega fallida: Motivo`, texto libre de la hoja) y chip de
+  intentos — ámbar "1 fallo — revisar" o rojo "N fallos — debe volver a Lima" (N≥2), mismo
+  criterio que la regla de membresía del módulo.
+- **No respeta los filtros de la barra superior** (empresa/proveedor/etapa/etc.) — se
+  calcula sobre `enriquecidos` (todo el backlog no-terminal), no sobre `completo` (el set
+  post-filtros). Es intencional: es un universo aparte, "excluido" de lo demás, como pidió
+  el usuario — si en algún momento se quiere que SÍ respete los filtros de arriba, cambiar
+  `backlogDevoluciones_(enriquecidos, ...)` por `backlogDevoluciones_(completo, ...)` en
+  `getBacklogData`.
+- **Diagnóstico**: `debugDevoluciones()` en el editor de Apps Script — cuántos folios entran
+  por cada condición, cuántos quedaron sin ETA de devolución calculable, y cuántos feriados
+  se cargaron (para confirmar que la hoja `Feriados` se está leyendo).
 
 ## Filas/gráficas como filtro (cross-filter, multi-selección desde el 20 ago 2026)
 - Clic en una fila de **Cliente**, **Proveedor**, **Don Veloz**, **Evento** o **Etapa** suma

@@ -1,7 +1,8 @@
 const CONFIG = {
   SPREADSHEET_ID: '1yt-vTk6oZWbX0uHbqhUOu9DahmaBgikArUz_QUIwx8Y', // "Backlog - PE"
   SHEET_NAME: 'BD',
-  LT_SHEET_NAME: 'LT', // hoja de cruce Destino: Zonificación → Zona, agregada 21 ago 2026
+  LT_SHEET_NAME: 'LT', // hoja de cruce Destino: Zonificación → Zona/LT, agregada 21 ago 2026
+  FERIADOS_SHEET_NAME: 'Feriados', // agregada 21 ago 2026, para "ETA de devolución"
   HEADER_ROW: 1
 };
 
@@ -50,6 +51,8 @@ const HEADERS = {
   proveedor:         ['Último evento: Proveedor'],
   entregaFallidaFecha:    ['Entrega fallida: Fecha (1er evento)'],
   entregaConfirmadaFecha: ['Entrega confirmada: Fecha (1er evento)'],
+  entregaFallidaMotivo:   ['Entrega fallida: Motivo'],
+  entregaFallidaIntentos: ['Entrega fallida: Intentos'],
   destinoZonificacion:    ['Destino: Zonificación']
 };
 
@@ -57,7 +60,16 @@ const HEADERS = {
 // mapa aparte de HEADERS porque es una hoja distinta, con sus propias columnas.
 const HEADERS_LT = {
   destinoZonificacion: ['Destino: Zonificación'],
-  zona:                ['Zona']
+  zona:                ['Zona'],
+  lt:                  ['LT']
+};
+
+// Encabezados de la hoja Feriados (agregada por el usuario 21 ago 2026, columnas:
+// country, day, month, year, description, Fecha) — usada para "ETA de devolución"
+// (ver sumarDiasHabiles_).
+const HEADERS_FERIADOS = {
+  country: ['country'],
+  fecha:   ['Fecha']
 };
 
 function doGet() {
@@ -166,13 +178,15 @@ function diasEntre_(fecha, hoy) {
   return Math.round((b - a) / 86400000);
 }
 
-// Mapa "Destino: Zonificación" → "Zona" leído de la hoja LT (agregada por el usuario 21 ago
-// 2026, columnas: Destino: Zonificación, Departamento, Provincia, Distrito, LT, Zona). El
-// folio no trae la Zona directamente — se resuelve cruzando su propia columna "Destino:
-// Zonificación" contra esta tabla. Si la hoja LT no existe todavía, o no tiene las columnas
-// esperadas, el cruce simplemente no aporta zonas (folios quedan con zona: ''), no rompe el
-// dashboard — ver debugZonas() para diagnosticar códigos sin match.
-function leerZonasPorDestino_() {
+// Mapa "Destino: Zonificación" → { zona, lt } leído de la hoja LT (agregada por el usuario
+// 21 ago 2026, columnas: Destino: Zonificación, Departamento, Provincia, Distrito, LT,
+// Zona). El folio no trae Zona ni LT directamente — se resuelven cruzando su propia columna
+// "Destino: Zonificación" contra esta tabla. `lt` es el lead time en días hábiles hasta ese
+// destino, usado por sumarDiasHabiles_ para "ETA de devolución". Si la hoja LT no existe
+// todavía, o no tiene las columnas esperadas, el cruce simplemente no aporta nada (folios
+// quedan con zona: '' y lt: null), no rompe el dashboard — ver debugZonas() para
+// diagnosticar códigos sin match.
+function leerInfoLT_() {
   const hoja = abrirHojaPorNombre_(CONFIG.LT_SHEET_NAME);
   if (!hoja) return {};
   const valores = hoja.getDataRange().getValues();
@@ -187,13 +201,61 @@ function leerZonasPorDestino_() {
   for (let i = 1; i < valores.length; i++) {
     const destino = String(valores[i][cols.destinoZonificacion] || '').trim();
     if (!destino) continue;
-    mapa[destino] = String(valores[i][cols.zona] || '').trim();
+    const lt = Number(valores[i][cols.lt]);
+    mapa[destino] = {
+      zona: String(valores[i][cols.zona] || '').trim(),
+      lt: isNaN(lt) ? null : lt
+    };
   }
   return mapa;
 }
 
-function leerFolios_(zonasPorDestino) {
-  zonasPorDestino = zonasPorDestino || {};
+// Set de fechas feriadas ('yyyy-MM-dd' → true) leído de la hoja Feriados (agregada por el
+// usuario 21 ago 2026, columnas: country, day, month, year, description, Fecha) — filtra
+// por country = 'PER'. Mismo criterio de "hoja opcional" que leerInfoLT_: si no existe o le
+// faltan columnas, devuelve un Set vacío (ningún día cuenta como feriado) en vez de romper
+// el dashboard.
+function leerFeriados_() {
+  const hoja = abrirHojaPorNombre_(CONFIG.FERIADOS_SHEET_NAME);
+  if (!hoja) return {};
+  const valores = hoja.getDataRange().getValues();
+  if (valores.length < 2) return {};
+  let cols;
+  try {
+    cols = resolverColumnas_(valores[0], HEADERS_FERIADOS);
+  } catch (e) {
+    return {};
+  }
+  const set = {};
+  for (let i = 1; i < valores.length; i++) {
+    if (String(valores[i][cols.country] || '').trim().toUpperCase() !== 'PER') continue;
+    const fecha = comoFecha_(valores[i][cols.fecha]);
+    if (!fecha) continue;
+    set[Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'yyyy-MM-dd')] = true;
+  }
+  return set;
+}
+
+// Suma `diasHabiles` días hábiles a `fechaInicio` (sin contar domingos ni feriados de
+// `feriados`, un mapa 'yyyy-MM-dd' → true) — usado para "ETA de devolución" = ETA de
+// entrega + LT del destino (decisión del usuario, 21 ago 2026). Empieza a contar desde el
+// día SIGUIENTE a fechaInicio (no cuenta el propio día de la ETA de entrega como hábil).
+// Devuelve null si falta la fecha de inicio o el LT (no se puede calcular).
+function sumarDiasHabiles_(fechaInicio, diasHabiles, feriados) {
+  if (!fechaInicio || diasHabiles == null) return null;
+  const fecha = new Date(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate());
+  let restantes = diasHabiles;
+  while (restantes > 0) {
+    fecha.setDate(fecha.getDate() + 1);
+    const esDomingo = fecha.getDay() === 0;
+    const clave = Utilities.formatDate(fecha, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (!esDomingo && !feriados[clave]) restantes--;
+  }
+  return fecha;
+}
+
+function leerFolios_(infoLT) {
+  infoLT = infoLT || {};
   const hoja = abrirHoja_();
   const valores = hoja.getDataRange().getValues();
   const cols = resolverColumnas_(valores[CONFIG.HEADER_ROW - 1]);
@@ -202,6 +264,8 @@ function leerFolios_(zonasPorDestino) {
     const fila = valores[i];
     if (fila[cols.folio] === '' || fila[cols.folio] == null) continue;
     const destinoZonificacion = String(fila[cols.destinoZonificacion] || '').trim();
+    const info = infoLT[destinoZonificacion] || {};
+    const intentos = Number(fila[cols.entregaFallidaIntentos]);
     folios.push({
       folio: String(fila[cols.folio]),
       empresa: String(fila[cols.empresa] || 'Sin empresa'),
@@ -215,8 +279,14 @@ function leerFolios_(zonasPorDestino) {
       // confirmada tienen fecha de primer evento — al folio no se le intentó entregar aún.
       noIntentado: comoFecha_(fila[cols.entregaFallidaFecha]) == null &&
         comoFecha_(fila[cols.entregaConfirmadaFecha]) == null,
+      // Motivo/cantidad de fallos (agregado 21 ago 2026, para "Backlog de Devoluciones"):
+      // 1 fallo = hay algo por revisar; 2+ fallos = el folio debe volver a Lima (regla del
+      // usuario), ver backlogDevoluciones_.
+      entregaFallidaMotivo: String(fila[cols.entregaFallidaMotivo] || ''),
+      entregaFallidaIntentos: isNaN(intentos) ? 0 : intentos,
       destinoZonificacion: destinoZonificacion,
-      zona: zonasPorDestino[destinoZonificacion] || ''
+      zona: info.zona || '',
+      lt: info.lt != null ? info.lt : null
     });
   }
   return folios;
@@ -398,11 +468,58 @@ function detalleMasAntiguos_(folios) {
     });
 }
 
+// "Backlog de Devoluciones" (módulo aparte, agregado 21 ago 2026 a pedido del usuario —
+// no se mezcla con el resto de vistas ni respeta los filtros de la barra superior, siempre
+// muestra el universo completo). Folios candidatos: ya están en camino de vuelta a Lima
+// (etapa en_camino_devolucion, eventos 5001/5101) O acumularon 2+ intentos fallidos de
+// entrega (regla del usuario: 2 fallos = debe volver a Lima, aunque el evento todavía no lo
+// refleje) — es un OR, cualquiera de las dos condiciones alcanza.
+//
+// "ETA de devolución" = ETA de entrega (`eta`) + LT del destino (días hábiles, sin domingos
+// ni feriados de la hoja Feriados) — sirve para saber si un folio YA debió haber llegado de
+// vuelta al almacén de Lima aunque nadie lo haya registrado. Si falta la ETA de entrega o no
+// hubo match de LT en la hoja LT, queda sin ETA de devolución (el folio igual aparece, sin
+// poder calcular el atraso).
+//
+// Ordenado por días de atraso descendente (más atrasado primero, decisión del usuario) —
+// los que no se pueden calcular quedan al final, no se mezclan con los "en plazo".
+function backlogDevoluciones_(folios, hoy, feriados) {
+  return folios
+    .filter(function(f) {
+      return f.etapa.clave === 'en_camino_devolucion' || f.entregaFallidaIntentos >= 2;
+    })
+    .map(function(f) {
+      const etaDevolucion = sumarDiasHabiles_(f.eta, f.lt, feriados);
+      const diasAtraso = etaDevolucion ? diasEntre_(etaDevolucion, hoy) : null;
+      return {
+        folio: f.folio,
+        empresa: f.empresa,
+        etapa: f.etapa.etiqueta,
+        proveedor: f.proveedor,
+        donVeloz: f.donVeloz,
+        zona: f.zona,
+        lt: f.lt,
+        eta: f.eta ? Utilities.formatDate(f.eta, Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
+        etaDevolucion: etaDevolucion ? Utilities.formatDate(etaDevolucion, Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
+        diasAtraso: diasAtraso,
+        motivoFallo: f.entregaFallidaMotivo,
+        intentos: f.entregaFallidaIntentos
+      };
+    })
+    .sort(function(a, b) {
+      if (a.diasAtraso == null && b.diasAtraso == null) return 0;
+      if (a.diasAtraso == null) return 1;
+      if (b.diasAtraso == null) return -1;
+      return b.diasAtraso - a.diasAtraso;
+    });
+}
+
 function getBacklogData(params) {
   params = params || {};
   const hoy = new Date();
-  const zonasPorDestino = leerZonasPorDestino_();
-  const todos = leerFolios_(zonasPorDestino);
+  const infoLT = leerInfoLT_();
+  const feriados = leerFeriados_();
+  const todos = leerFolios_(infoLT);
   const enBacklog = todos.filter(function(f) { return esBacklog_(f.ultimoEvento); });
 
   const opciones = {
@@ -488,6 +605,10 @@ function getBacklogData(params) {
     porEta: porEta_(filtrar_('eta')),
     porAging: porAging_(filtrar_('aging')),
     detalle: detalleMasAntiguos_(completo),
+    // "Backlog de Devoluciones" usa `enriquecidos` (todo el backlog no-terminal), no
+    // `completo` — es un módulo aparte, no debe encogerse si alguien filtra por
+    // empresa/proveedor/etc. arriba (ver comentario en backlogDevoluciones_).
+    devoluciones: backlogDevoluciones_(enriquecidos, hoy, feriados),
     generadoEn: Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
   };
 }
@@ -534,11 +655,11 @@ function debugMuestra() {
 }
 
 // Diagnóstico del cruce con la hoja LT: cuántos códigos de "Destino: Zonificación" del
-// backlog no matchearon ninguna fila de LT (por ende, quedaron sin Zona). Ejecutar desde el
-// editor de Apps Script tras la primera corrida real con las hojas LT/Feriados ya creadas.
+// backlog no matchearon ninguna fila de LT (por ende, quedaron sin Zona/LT). Ejecutar desde
+// el editor de Apps Script tras la primera corrida real con las hojas LT/Feriados ya creadas.
 function debugZonas() {
-  const zonasPorDestino = leerZonasPorDestino_();
-  const todos = leerFolios_(zonasPorDestino);
+  const infoLT = leerInfoLT_();
+  const todos = leerFolios_(infoLT);
   const enBacklog = todos.filter(function(f) { return esBacklog_(f.ultimoEvento); });
   const sinZona = {};
   enBacklog.forEach(function(f) {
@@ -547,10 +668,35 @@ function debugZonas() {
     sinZona[clave] = (sinZona[clave] || 0) + 1;
   });
   const info = {
-    filasEnLT: Object.keys(zonasPorDestino).length,
+    filasEnLT: Object.keys(infoLT).length,
     totalBacklog: enBacklog.length,
     sinZona: enBacklog.length - enBacklog.filter(function(f) { return f.zona; }).length,
     destinosSinZona: Object.keys(sinZona).map(function(d) { return d + ' (x' + sinZona[d] + ')'; })
+  };
+  Logger.log(JSON.stringify(info, null, 2));
+  return info;
+}
+
+// Diagnóstico del "Backlog de Devoluciones": cuántos folios entran, cuántos quedaron sin
+// poder calcular ETA de devolución (sin ETA de entrega o sin LT del destino), y cuántos
+// feriados se cargaron desde la hoja Feriados (para confirmar que sí se están leyendo).
+// Ejecutar desde el editor de Apps Script tras la primera corrida real.
+function debugDevoluciones() {
+  const infoLT = leerInfoLT_();
+  const feriados = leerFeriados_();
+  const todos = leerFolios_(infoLT);
+  const enBacklog = todos.filter(function(f) { return esBacklog_(f.ultimoEvento); });
+  const enriquecidos = enBacklog.map(function(f) {
+    return Object.assign({}, f, { etapa: etapaDe_(f.ultimoEvento) });
+  });
+  const devoluciones = backlogDevoluciones_(enriquecidos, new Date(), feriados);
+  const info = {
+    feriadosCargados: Object.keys(feriados).length,
+    totalDevoluciones: devoluciones.length,
+    porEtapaDev: devoluciones.filter(function(d) { return d.etapa === 'En camino a Devolución (DEV)'; }).length,
+    por2MasFallos: devoluciones.filter(function(d) { return d.intentos >= 2; }).length,
+    sinEtaDevolucionCalculable: devoluciones.filter(function(d) { return d.etaDevolucion == null; }).length,
+    muestra: devoluciones.slice(0, 5)
   };
   Logger.log(JSON.stringify(info, null, 2));
   return info;

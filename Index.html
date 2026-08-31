@@ -97,6 +97,14 @@ h1 { font-size: 18px; font-weight: 600; }
 .card h2 { font-size: 13px; font-weight: 600; }
 .card .nota { font-size: 11px; color: var(--text-muted); margin: 2px 0 10px; }
 .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+
+.separador-modulo {
+  display: flex; align-items: center; gap: 10px; margin: 24px 0 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.separador-modulo::after { content: ''; flex: 1; height: 1px; background: var(--baseline); }
+.card-devoluciones { border-color: var(--brand-navy); }
 .ver-tabla {
   font-size: 11px; color: var(--text-secondary); background: none;
   border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer;
@@ -369,6 +377,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="nota">Top <span id="top-n"></span> folios en backlog con más días sin avance
         (de <span id="top-n-total"></span> filtrados en total).</div>
       <div class="tabla-scroll" id="t-detalle"></div>
+    </div>
+  </div>
+
+  <div class="separador-modulo"><span>Módulo aparte</span></div>
+  <div class="grid-cards una">
+    <div class="card card-devoluciones">
+      <h2>Backlog de Devoluciones</h2>
+      <div class="nota">Folios en camino de vuelta a Lima o con 2+ intentos fallidos de entrega
+        (con 1 fallo hay algo por revisar; con 2+ el folio debe volver a Lima). "ETA de
+        devolución" = ETA de entrega + LT del destino, en días hábiles (sin domingos ni
+        feriados) — si ya pasó y el folio sigue sin llegar, aparece atrasado.
+        <strong><span id="devoluciones-total"></span></strong> folios en este backlog,
+        <strong><span id="devoluciones-atrasados"></span></strong> atrasados. No se ve
+        afectado por los filtros de la barra superior — es un universo aparte. Clic en un
+        encabezado para ordenar.</div>
+      <div class="tabla-scroll" id="t-devoluciones"></div>
     </div>
   </div>
 </div>
@@ -953,6 +977,51 @@ function pintarDetalle() {
     '</tbody></table>';
 }
 
+// ── Backlog de Devoluciones (módulo aparte, no respeta los filtros de la barra superior —
+// ver comentario en backlogDevoluciones_ de Code.gs) ──
+let datosDevoluciones = [];
+let sortDevoluciones = { key: 'diasAtraso', dir: -1 };
+
+function chipAtraso_(dias) {
+  if (dias == null) return '<span class="chip muted">Sin ETA calculable</span>';
+  if (dias > 0) return '<span class="chip critical">Atrasado ' + dias + 'd</span>';
+  if (dias === 0) return '<span class="chip warning">Vence hoy</span>';
+  return '<span class="chip good">Faltan ' + (-dias) + 'd</span>';
+}
+
+function chipIntentos_(n) {
+  if (!n) return '–';
+  if (n === 1) return '<span class="chip warning">1 fallo — revisar</span>';
+  return '<span class="chip critical">' + n + ' fallos — debe volver a Lima</span>';
+}
+
+function pintarDevoluciones() {
+  const cols = [
+    ['folio', 'Folio'], ['empresa', 'Empresa'], ['etapa', 'Etapa'], ['zona', 'Zona'],
+    ['lt', 'LT (días)', true], ['eta', 'ETA entrega'], ['etaDevolucion', 'ETA devolución'],
+    ['diasAtraso', 'Atraso', true], ['motivoFallo', 'Motivo de fallo'], ['intentos', 'Intentos', true]
+  ];
+  const lista = ordenar(datosDevoluciones, sortDevoluciones);
+  document.getElementById('devoluciones-total').textContent = datosDevoluciones.length;
+  document.getElementById('devoluciones-atrasados').textContent =
+    datosDevoluciones.filter(d => d.diasAtraso != null && d.diasAtraso > 0).length;
+  document.getElementById('t-devoluciones').innerHTML =
+    '<table><thead>' + cabecerasHtml(cols, sortDevoluciones) + '</thead><tbody>' +
+    lista.map(d => '<tr>' +
+      '<td>' + d.folio + '</td>' +
+      '<td>' + d.empresa + '</td>' +
+      '<td>' + d.etapa + '</td>' +
+      '<td>' + (d.zona || '–') + '</td>' +
+      '<td class="num">' + fmt(d.lt) + '</td>' +
+      '<td>' + (d.eta || '–') + '</td>' +
+      '<td>' + (d.etaDevolucion || '–') + '</td>' +
+      '<td class="num">' + chipAtraso_(d.diasAtraso) + '</td>' +
+      '<td>' + (d.motivoFallo || '–') + '</td>' +
+      '<td class="num">' + chipIntentos_(d.intentos) + '</td>' +
+      '</tr>').join('') +
+    '</tbody></table>';
+}
+
 // ── Tablas agrupadas con desglose de aging (proveedor / cliente / evento) ──
 // Misma forma de datos ({ ...claves de BUCKETS_AGING, sinAging, total, ...clave(s) });
 // una sola función de render parametrizada por la(s) columna(s) identificadoras.
@@ -1047,6 +1116,9 @@ wireTabla('t-etapa', {
     const etiqueta = fila.children[0] ? fila.children[0].textContent : valor;
     alternarEtapa(valor, etiqueta);
   }
+});
+wireTabla('t-devoluciones', {
+  obtenerSort: () => sortDevoluciones, fijarSort: s => sortDevoluciones = s, repintar: pintarDevoluciones
 });
 
 function copiarTexto(texto, btn) {
@@ -1203,6 +1275,9 @@ function pintar(d) {
 
   datosDetalle = d.detalle;
   pintarDetalle();
+
+  datosDevoluciones = d.devoluciones;
+  pintarDevoluciones();
 
   renderChips();
 
