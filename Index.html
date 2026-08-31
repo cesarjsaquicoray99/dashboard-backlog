@@ -150,6 +150,9 @@ h1 { font-size: 18px; font-weight: 600; }
 
 th.ordenable { cursor: pointer; user-select: none; }
 th.ordenable:hover { color: var(--text-primary); }
+th.filtrable-aging { cursor: pointer; user-select: none; }
+th.filtrable-aging:hover { color: var(--text-primary); }
+th.filtrable-aging.activa { color: var(--brand-blue); font-weight: 700; }
 table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 th {
   text-align: left; font-size: 11px; color: var(--text-secondary);
@@ -903,8 +906,23 @@ function ordenar(lista, s) {
   });
 }
 
+// Si `k` es la clave de una columna de aging ('hoy'/'reciente'/'atencion'/'critico' o
+// 'sinAging'), devuelve la clave equivalente en agingSel ('sin_aging' para "sinAging",
+// tal cual para las demás) — null si `k` no es una columna de aging (ahí sigue siendo
+// ordenable, como Total o las columnas identificadoras).
+function claveAgingColumna_(k) {
+  if (k === 'sinAging') return 'sin_aging';
+  return BUCKETS_AGING.some(b => b.clave === k) ? k : null;
+}
+
 function cabecerasHtml(cols, s) {
   return '<tr>' + cols.map(function(c) {
+    const claveAging = claveAgingColumna_(c[0]);
+    if (claveAging) {
+      return '<th class="filtrable-aging' + (c[2] ? ' num' : '') +
+        (agingSel.has(claveAging) ? ' activa' : '') + '" data-key="' + c[0] +
+        '" title="Filtrar por ' + c[1] + '">' + c[1] + '</th>';
+    }
     return '<th class="ordenable' + (c[2] ? ' num' : '') + '" data-key="' + c[0] + '">' + c[1] +
       (s.key === c[0] ? (s.dir === 1 ? ' ▲' : ' ▼') : '') + '</th>';
   }).join('') + '</tr>';
@@ -978,17 +996,23 @@ function pintarEventos() {
   pintarTablaAgrupada('t-evento', datosEvento, sortEvento, [['codigo', 'Código'], ['etapa', 'Etapa']], eventosSel);
 }
 
-// Delegado por tabla: clic en un `th[data-key]` ordena (si la tabla tiene sort configurado);
-// clic en una fila `.fila-filtrable` aplica/quita un filtro y recarga los datos.
+// Delegado por tabla: clic en un `th[data-key]` de aging (0 días/1–2/3–5/6+/Sin fecha)
+// filtra por ese bucket (alternarAging, mismo Set que la dona); clic en cualquier otro
+// `th[data-key]` ordena (si la tabla tiene sort configurado, ej. Total o la columna
+// identificadora); clic en una fila `.fila-filtrable` aplica/quita un filtro y recarga.
 function wireTabla(contId, cfg) {
   document.getElementById(contId).addEventListener('click', function(e) {
     const th = e.target.closest('th[data-key]');
-    if (th && cfg.obtenerSort) {
-      const s = cfg.obtenerSort();
+    if (th) {
       const k = th.dataset.key;
-      if (s.key === k) s.dir = -s.dir;
-      else cfg.fijarSort({ key: k, dir: -1 });
-      cfg.repintar();
+      const claveAging = claveAgingColumna_(k);
+      if (claveAging) { alternarAging(claveAging); return; }
+      if (cfg.obtenerSort) {
+        const s = cfg.obtenerSort();
+        if (s.key === k) s.dir = -s.dir;
+        else cfg.fijarSort({ key: k, dir: -1 });
+        cfg.repintar();
+      }
       return;
     }
     const fila = e.target.closest('tr.fila-filtrable');

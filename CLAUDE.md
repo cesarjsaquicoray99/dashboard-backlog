@@ -159,9 +159,18 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   la tabla — no era un bug, era el recorte fijo a 50 descartándolos por ser los menos
   urgentes; la solución no fue subir el tope sino hacerlo configurable y separar "lo que
   se ve" de "lo que se puede copiar".
-- Las tres tablas agrupadas (cliente/proveedor/evento) comparten el render `pintarTablaAgrupada()`
-  en `Index.html` — misma forma de datos desde el backend (`{...claves de BUCKETS_AGING,
-  sinAging, total, ...clave(s)}`), solo cambia la(s) columna(s) identificadora(s).
+- Las tablas agrupadas (cliente/proveedor/veloz/evento) comparten el render
+  `pintarTablaAgrupada()` en `Index.html` — misma forma de datos desde el backend
+  (`{...claves de BUCKETS_AGING, sinAging, total, ...clave(s)}`), solo cambia la(s)
+  columna(s) identificadora(s).
+- **Encabezados de columna con doble función** (agregado 21 ago 2026, vía `cabecerasHtml()`
+  + `wireTabla()` compartidos): en estas mismas tablas, clickear el encabezado de una
+  columna de aging (0 días/1–2/3–5/6+/Sin fecha) **filtra** por ese bucket — llama a la
+  misma `alternarAging()` que usa la dona, no es un mecanismo aparte (`claveAgingColumna_()`
+  detecta si la clave de la columna es de aging). Clickear cualquier otro encabezado
+  (Empresa, Proveedor, Total, etc.) sigue **ordenando**, como siempre. Si se agrega una
+  columna nueva con una clave que coincida con un bucket de `BUCKETS_AGING` (o `'sinAging'`)
+  en una tabla donde eso NO debería filtrar, hay que ajustar `claveAgingColumna_()`.
 
 ## Filas/gráficas como filtro (cross-filter, multi-selección desde el 20 ago 2026)
 - Clic en una fila de **Cliente**, **Proveedor**, **Don Veloz**, **Evento** o **Etapa** suma
