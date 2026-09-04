@@ -371,6 +371,16 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
 - Ejes Chart.js: formatear ticks con `+Number(v).toFixed(n)` por errores de punto flotante
   (no aplica todavía aquí porque no hay ejes decimales, pero si se agregan promedios en el
   eje, tenerlo presente).
+- **Etiqueta "Sin X asignado" tiene que vivir en el folio crudo, no solo en el agregado**
+  (bug real encontrado por el usuario el 21 ago 2026, en Proveedor y Don Veloz): si una
+  tabla agrupada rellena un valor vacío con una etiqueta tipo "Sin proveedor asignado" SOLO
+  dentro de la función de agregación (`f.proveedor || 'Sin proveedor asignado'`) pero el
+  folio real sigue con `''`, clickear esa fila para filtrar compara el texto de la etiqueta
+  contra `f.proveedor` crudo — nunca matchea, 0 resultados siempre, silenciosamente (sin
+  error). La etiqueta tiene que ponerse en `leerFolios_` (mismo patrón que ya usaba
+  "Sin empresa"), no inventarse recién al agrupar. Si se agrega una dimensión nueva con
+  folios "sin asignar" y una tabla clickeable-como-filtro, seguir este patrón desde el
+  principio.
 
 ## Pendientes latentes
 - Buckets de aging (0 / 1–2 / 3–5 / 6+ días) confirmados por el usuario el 20 ago 2026 —

@@ -299,8 +299,13 @@ function leerFolios_(infoLT) {
       eta: comoFecha_(fila[cols.etaFecha]),
       ultimoEventoFecha: comoFecha_(fila[cols.ultimoEventoFecha]),
       ultimoEvento: primeros4_(fila[cols.ultimoEvento]),
-      donVeloz: String(fila[cols.donVeloz] || ''),
-      proveedor: String(fila[cols.proveedor] || ''),
+      // "Sin Don Veloz asignado"/"Sin proveedor asignado" se ponen acá, en el folio crudo
+      // (mismo patrón que "Sin empresa" arriba) — antes solo existían dentro de
+      // porDonVeloz_/porProveedor_, así que clickear esa fila para filtrar comparaba contra
+      // el texto "Sin Don Veloz asignado" pero el folio real tenía '' — 0 resultados
+      // siempre. Bug encontrado por el usuario el 21 ago 2026.
+      donVeloz: String(fila[cols.donVeloz] || 'Sin Don Veloz asignado'),
+      proveedor: String(fila[cols.proveedor] || 'Sin proveedor asignado'),
       // "No intentados" (decisión del usuario, 20 ago 2026): ni la entrega fallida ni la
       // confirmada tienen fecha de primer evento — al folio no se le intentó entregar aún.
       noIntentado: comoFecha_(fila[cols.entregaFallidaFecha]) == null &&
@@ -368,12 +373,13 @@ function porEtapa_(folios) {
 }
 
 // Backlog agrupado por proveedor (quien tiene el folio ahora, "Último evento: Proveedor"),
-// con el mismo desglose de aging que porEtapa_. Los folios sin proveedor asignado se
-// agrupan bajo "Sin proveedor asignado" en vez de perderse.
+// con el mismo desglose de aging que porEtapa_. Los folios sin proveedor asignado ya vienen
+// con la etiqueta "Sin proveedor asignado" puesta en leerFolios_, no hace falta el fallback
+// acá (por eso NO es `f.proveedor || 'Sin proveedor asignado'` — ver bug del 21 ago 2026).
 function porProveedor_(folios) {
   const por = {};
   folios.forEach(function(f) {
-    const clave = f.proveedor || 'Sin proveedor asignado';
+    const clave = f.proveedor;
     if (!por[clave]) por[clave] = nuevoAcumuladorAging_({ proveedor: clave });
     const b = por[clave];
     b.total++;
@@ -385,12 +391,12 @@ function porProveedor_(folios) {
 }
 
 // Backlog agrupado por Don Veloz ("Último evento: Nombre Don Veloz"), mismo desglose de
-// aging que porProveedor_. Los folios sin Don Veloz asignado se agrupan bajo "Sin Don Veloz
-// asignado" en vez de perderse (agregada 20 ago 2026).
+// aging que porProveedor_. Mismo comentario que porProveedor_: la etiqueta "Sin Don Veloz
+// asignado" ya viene puesta en leerFolios_, sin fallback acá.
 function porDonVeloz_(folios) {
   const por = {};
   folios.forEach(function(f) {
-    const clave = f.donVeloz || 'Sin Don Veloz asignado';
+    const clave = f.donVeloz;
     if (!por[clave]) por[clave] = nuevoAcumuladorAging_({ donVeloz: clave });
     const b = por[clave];
     b.total++;
