@@ -257,9 +257,14 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   mezclan con los que sí están en plazo. Chips de color: rojo "Atrasado Nd" si ya pasó,
   ámbar "Vence hoy", verde "Faltan Nd" si todavía no llega la fecha, gris "Sin ETA
   calculable" (los "N" de estos chips son días hábiles, no calendario).
-- **Columna de fallos**: motivo (`Entrega fallida: Motivo`, texto libre de la hoja) y chip de
-  intentos — ámbar "1 fallo — revisar" o rojo "N fallos — debe volver a Lima" (N≥2), mismo
-  criterio que la regla de membresía del módulo.
+- **Columna de fallos**: **Último fallo** (`Entrega fallida: Fecha`, agregado 21 ago 2026 —
+  fecha+hora del fallo más reciente, formateada `yyyy-MM-dd HH:mm`; **ojo, es una columna
+  distinta de `Entrega fallida: Fecha (1er evento)`** que ya se usaba para "No intentados" —
+  esa es del primer intento y no cambia, esta es del último y sí se actualiza con cada
+  fallo nuevo, ver `HEADERS.entregaFallidaUltimaFecha` en `Code.gs`), motivo
+  (`Entrega fallida: Motivo`, texto libre de la hoja) y chip de intentos — ámbar "1 fallo —
+  revisar" o rojo "N fallos — debe volver a Lima" (N≥2), mismo criterio que la regla de
+  membresía del módulo.
 - **No respeta los filtros de la barra superior** (empresa/proveedor/etapa/etc.) — se
   calcula sobre `enriquecidos` (todo el backlog no-terminal), no sobre `completo` (el set
   post-filtros). Es intencional: es un universo aparte, "excluido" de lo demás, como pidió

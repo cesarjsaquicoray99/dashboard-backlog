@@ -1036,7 +1036,7 @@ function pintarDevoluciones() {
     ['departamento', 'Departamento'], ['provincia', 'Provincia'], ['distrito', 'Distrito'],
     ['zona', 'Zona'], ['lt', 'LT (días)', true], ['eta', 'ETA entrega'],
     ['etaDevolucion', 'ETA devolución'], ['diasAtraso', 'Atraso', true],
-    ['motivoFallo', 'Motivo de fallo'], ['intentos', 'Intentos', true]
+    ['ultimoFallo', 'Último fallo'], ['motivoFallo', 'Motivo de fallo'], ['intentos', 'Intentos', true]
   ];
   const lista = ordenar(datosDevoluciones, sortDevoluciones);
   document.getElementById('devoluciones-total').textContent = datosDevoluciones.length;
@@ -1056,6 +1056,7 @@ function pintarDevoluciones() {
       '<td>' + (d.eta || '–') + '</td>' +
       '<td>' + (d.etaDevolucion || '–') + '</td>' +
       '<td class="num">' + chipAtraso_(d.diasAtraso) + '</td>' +
+      '<td>' + (d.ultimoFallo || '–') + '</td>' +
       '<td>' + (d.motivoFallo || '–') + '</td>' +
       '<td class="num">' + chipIntentos_(d.intentos) + '</td>' +
       '</tr>').join('') +

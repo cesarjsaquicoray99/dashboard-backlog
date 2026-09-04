@@ -71,6 +71,9 @@ const HEADERS = {
   entregaConfirmadaFecha: ['Entrega confirmada: Fecha (1er evento)'],
   entregaFallidaMotivo:   ['Entrega fallida: Motivo'],
   entregaFallidaIntentos: ['Entrega fallida: Intentos'],
+  // Distinta de "Entrega fallida: Fecha (1er evento)" — esta es la fecha del ÚLTIMO fallo,
+  // se actualiza con cada intento (agregada 21 ago 2026, para "Backlog de Devoluciones").
+  entregaFallidaUltimaFecha: ['Entrega fallida: Fecha'],
   destinoZonificacion:    ['Destino: Zonificación']
 };
 
@@ -347,6 +350,7 @@ function leerFolios_(infoLT) {
       // usuario), ver backlogDevoluciones_.
       entregaFallidaMotivo: String(fila[cols.entregaFallidaMotivo] || ''),
       entregaFallidaIntentos: isNaN(intentos) ? 0 : intentos,
+      entregaFallidaUltimaFecha: comoFecha_(fila[cols.entregaFallidaUltimaFecha]),
       destinoZonificacion: destinoZonificacion,
       departamento: info.departamento || '',
       provincia: info.provincia || '',
@@ -573,7 +577,10 @@ function backlogDevoluciones_(folios, hoy, feriados) {
         etaDevolucion: etaDevolucion ? Utilities.formatDate(etaDevolucion, Session.getScriptTimeZone(), 'yyyy-MM-dd') : null,
         diasAtraso: diasAtraso,
         motivoFallo: f.entregaFallidaMotivo,
-        intentos: f.entregaFallidaIntentos
+        intentos: f.entregaFallidaIntentos,
+        ultimoFallo: f.entregaFallidaUltimaFecha
+          ? Utilities.formatDate(f.entregaFallidaUltimaFecha, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm')
+          : null
       };
     })
     .sort(function(a, b) {
