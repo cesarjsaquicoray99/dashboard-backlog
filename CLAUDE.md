@@ -78,6 +78,14 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   `bucketAging_`, sería un cambio de alcance distinto que habría que confirmar aparte).
 
 ## Definiciones de negocio (decisiones del usuario, 13 ago 2026)
+- **Don Veloz inferido para SVR en tránsito** (regla agregada 21 ago 2026, en `leerFolios_`):
+  si `Último evento: Proveedor` = `SVR` y `Último evento: Evento` empieza con `3004`
+  (Traslado a Partner — SVR ya lo tiene, pero la hoja todavía no le asignó un repartidor
+  puntual), el folio se rellena con `donVeloz = 'SVR Repartidor SAVAR'` en vez de "Sin Don
+  Veloz asignado" — el usuario sabe que en la práctica ese es quien lo reparte, aunque la
+  hoja no lo tenga registrado todavía. Es una inferencia, no un dato de la hoja — si `SVR`
+  cambia de nombre o empieza a operar con otro repartidor, hay que ajustar esta regla a
+  mano en `Code.gs`.
 - **Backlog** = folios cuyo `Último evento: Evento` (4 primeros caracteres) **no** es uno de
   los eventos terminales `4002, 5002, 8002, 8003, 8004`. Los folios **sin ningún evento**
   (columna vacía) están **excluidos** del backlog (decisión explícita del usuario, no son

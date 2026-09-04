@@ -292,20 +292,29 @@ function leerFolios_(infoLT) {
     const destinoZonificacion = String(fila[cols.destinoZonificacion] || '').trim();
     const info = infoLT[destinoZonificacion] || {};
     const intentos = Number(fila[cols.entregaFallidaIntentos]);
+    const ultimoEvento = primeros4_(fila[cols.ultimoEvento]);
+    const proveedor = String(fila[cols.proveedor] || 'Sin proveedor asignado');
+    // "Sin Don Veloz asignado" se pone acá, en el folio crudo (mismo patrón que "Sin
+    // empresa" arriba) — antes solo existía dentro de porDonVeloz_, así que clickear esa
+    // fila para filtrar comparaba contra el texto "Sin Don Veloz asignado" pero el folio
+    // real tenía '' — 0 resultados siempre. Bug encontrado por el usuario el 21 ago 2026.
+    let donVeloz = String(fila[cols.donVeloz] || 'Sin Don Veloz asignado');
+    // Regla del usuario (21 ago 2026): si el proveedor actual es SVR y el folio sigue en
+    // "Traslado a Partner" (evento 3004 — SVR ya lo tiene, pero todavía no se asignó a un
+    // repartidor puntual en la hoja), se sabe que en la práctica lo reparte
+    // "Repartidor SAVAR" — se rellena aunque la hoja no traiga ese dato todavía.
+    if (proveedor === 'SVR' && ultimoEvento === '3004') {
+      donVeloz = 'SVR Repartidor SAVAR';
+    }
     folios.push({
       folio: String(fila[cols.folio]),
       empresa: String(fila[cols.empresa] || 'Sin empresa'),
       tipoEnvio: String(fila[cols.tipoEnvio] || 'Sin tipo'),
       eta: comoFecha_(fila[cols.etaFecha]),
       ultimoEventoFecha: comoFecha_(fila[cols.ultimoEventoFecha]),
-      ultimoEvento: primeros4_(fila[cols.ultimoEvento]),
-      // "Sin Don Veloz asignado"/"Sin proveedor asignado" se ponen acá, en el folio crudo
-      // (mismo patrón que "Sin empresa" arriba) — antes solo existían dentro de
-      // porDonVeloz_/porProveedor_, así que clickear esa fila para filtrar comparaba contra
-      // el texto "Sin Don Veloz asignado" pero el folio real tenía '' — 0 resultados
-      // siempre. Bug encontrado por el usuario el 21 ago 2026.
-      donVeloz: String(fila[cols.donVeloz] || 'Sin Don Veloz asignado'),
-      proveedor: String(fila[cols.proveedor] || 'Sin proveedor asignado'),
+      ultimoEvento: ultimoEvento,
+      donVeloz: donVeloz,
+      proveedor: proveedor,
       // "No intentados" (decisión del usuario, 20 ago 2026): ni la entrega fallida ni la
       // confirmada tienen fecha de primer evento — al folio no se le intentó entregar aún.
       noIntentado: comoFecha_(fila[cols.entregaFallidaFecha]) == null &&
