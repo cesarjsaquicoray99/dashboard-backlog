@@ -280,6 +280,29 @@ function sumarDiasHabiles_(fechaInicio, diasHabiles, feriados) {
   return fecha;
 }
 
+// Días HÁBILES con signo entre `desde` y `hasta` (sin domingos ni feriados) — positivo si
+// `hasta` es posterior a `desde` (ej. hoy pasó la ETA de devolución → atrasado), negativo si
+// es anterior (ej. todavía no llega la ETA → faltan N días hábiles), 0 si son el mismo día.
+// Usado para "Atraso" en Backlog de Devoluciones (cambiado de calendario a hábil el 21 ago
+// 2026, a pedido del usuario, para ser consistente con el criterio hábil que ya usa
+// sumarDiasHabiles_ al calcular la propia ETA de devolución).
+function diasHabilesEntre_(desde, hasta, feriados) {
+  const a = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate());
+  const b = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
+  const signo = b >= a ? 1 : -1;
+  const ini = signo === 1 ? a : b;
+  const fin = signo === 1 ? b : a;
+  const cursor = new Date(ini);
+  let cuenta = 0;
+  while (cursor < fin) {
+    cursor.setDate(cursor.getDate() + 1);
+    const esDomingo = cursor.getDay() === 0;
+    const clave = Utilities.formatDate(cursor, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    if (!esDomingo && !feriados[clave]) cuenta++;
+  }
+  return cuenta * signo;
+}
+
 function leerFolios_(infoLT) {
   infoLT = infoLT || {};
   const hoja = abrirHoja_();
@@ -534,7 +557,7 @@ function backlogDevoluciones_(folios, hoy, feriados) {
     })
     .map(function(f) {
       const etaDevolucion = sumarDiasHabiles_(f.eta, f.lt, feriados);
-      const diasAtraso = etaDevolucion ? diasEntre_(etaDevolucion, hoy) : null;
+      const diasAtraso = etaDevolucion ? diasHabilesEntre_(etaDevolucion, hoy, feriados) : null;
       return {
         folio: f.folio,
         empresa: f.empresa,

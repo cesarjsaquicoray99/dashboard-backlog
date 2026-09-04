@@ -246,11 +246,17 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   de la ETA), ajustar `sumarDiasHabiles_()`. Si falta la ETA de entrega o no hubo match de
   `LT` en la hoja `LT`, el folio aparece igual pero sin poder calcular el atraso (columna
   "Sin ETA calculable").
+- **"Atraso" (hoy − ETA de devolución) también en días hábiles** (cambiado de calendario a
+  hábil el 21 ago 2026, a pedido del usuario, para ser consistente con cómo ya se calcula la
+  ETA de devolución) — `diasHabilesEntre_()` en `Code.gs`, cuenta con signo (positivo =
+  atrasado, negativo = faltan, sin domingos ni feriados en ningún caso) y se usa **solo**
+  acá, no reemplaza a `diasEntre_()` (que sigue en días calendario para el aging del
+  backlog general — son cosas distintas, no cambiar una pensando que afecta a la otra).
 - **Ordenado por días de atraso** (hoy − ETA de devolución) **descendente**, más atrasado
   primero (decisión del usuario) — los que no se pueden calcular quedan al final, no se
   mezclan con los que sí están en plazo. Chips de color: rojo "Atrasado Nd" si ya pasó,
   ámbar "Vence hoy", verde "Faltan Nd" si todavía no llega la fecha, gris "Sin ETA
-  calculable".
+  calculable" (los "N" de estos chips son días hábiles, no calendario).
 - **Columna de fallos**: motivo (`Entrega fallida: Motivo`, texto libre de la hoja) y chip de
   intentos — ámbar "1 fallo — revisar" o rojo "N fallos — debe volver a Lima" (N≥2), mismo
   criterio que la regla de membresía del módulo.
