@@ -125,6 +125,15 @@ la operación: en qué etapa está atascado cada folio y cuántos días lleva si
   dimensiones se agregan como un `.filtro` más dentro de la misma `.filtros` (que ya tiene
   `flex-wrap: wrap`, así que si no entran en una fila pasan a la siguiente, pero nunca se
   ocultan).
+- **Barra de filtros fija al hacer scroll** (agregado 21 ago 2026, a pedido del usuario —
+  "la barra de filtros no se queda frezzeada", quería que se congele arriba en vez de
+  desaparecer al bajar): `.filtros` + `#chips-filtro` viven dentro de un contenedor
+  `.barra-filtros-fija` (`position: sticky; top: 0`) con fondo sólido (`--page`) y
+  `z-index: 40` para quedar por encima del resto del contenido al scrollear. El wrapper
+  lleva `padding: 1px 0` a propósito — sin eso, el `margin-top` de `.filtros` "escapa" del
+  wrapper (colapso de márgenes CSS) y queda un hueco transparente arriba al pegarse, donde
+  se alcanza a ver el contenido de atrás pasando por debajo. Si se agrega algo más adentro
+  de este wrapper, tenerlo en cuenta.
 
 ## Vistas del dashboard
 - KPI tiles en su propia fila completa (4 columnas: total, % crítico, promedio de días, sin

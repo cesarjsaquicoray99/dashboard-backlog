@@ -48,6 +48,10 @@ body {
 h1 { font-size: 18px; font-weight: 600; }
 .subtitulo { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
 
+.barra-filtros-fija {
+  position: sticky; top: 0; z-index: 40; background: var(--page);
+  padding: 1px 0; /* evita que el margin-top de .filtros "escape" y deje un hueco al pegarse */
+}
 .filtros {
   display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
   background: var(--surface-1); border: 1px solid var(--border);
@@ -233,6 +237,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      target="_blank" rel="noopener">Abrir Google Sheet ↗</a>
 </div>
 
+<div class="barra-filtros-fija">
 <div class="filtros">
   <div class="filtro"><label>Empresa</label>
     <div class="multisel" id="f-empresa-box">
@@ -277,6 +282,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 </div>
 
 <div class="chips-filtro oculto" id="chips-filtro"></div>
+</div>
 
 <div id="error"></div>
 
